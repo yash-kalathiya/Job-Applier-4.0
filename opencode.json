@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "servers": {
+      "job_applier": {
+        "type": "local",
+        "command": [
+          "python3",
+          "/home/yash/Project/job_application_4/bin/job-applier",
+          "mcp"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+ "name": "Alex Rivera", "email": "alex.rivera@example.edu", "phone": "(555) 010-2048", "location": "Austin, TX",
+ "linkedin": "https://linkedin.com/in/alexrivera", "github": "https://github.com/alexrivera",
+ "school": "University of Texas at Austin", "degree": "Bachelor of Science", "major": "Computer Science", "gpa": "3.86",
+ "grad_month": "May", "grad_year": "2029", "work_authorized_us": true, "needs_sponsorship": false,
+ "search": {"kind": "internship", "season": "Summer 2027", "roles": ["software engineer", "machine learning", "data science"],
+            "locations": ["United States", "Remote"], "min_fit": 65},
+ "apply": {"auto_submit": false, "daily_limit": 30, "per_company_cap": 3, "template": "classic"}
+}

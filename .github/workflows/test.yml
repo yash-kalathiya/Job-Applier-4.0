@@ -1,0 +1,56 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tests/smoke.py
+      - run: python tests/e2e_fresh.py
+      - run: python tests/e2e_careers.py
+      - run: python tests/e2e_agents.py
+
+  oldest-python:
+    # the oldest Python Job Applier 4.0 supports (many Macs and Ubuntu 22.04 still ship 3.9/3.10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: python tests/smoke.py
+      - run: python tests/e2e_agents.py
+
+  installer:
+    # runs the installer on fresh machines, for this exact commit
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install (Mac and Linux)
+        if: runner.os != 'Windows'
+        run: JOB_APPLIER_REF=${{ github.sha }} JOB_APPLIER_NO_APP=1 bash scripts/install-remote.sh
+      - name: Install (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:JOB_APPLIER_REF = '${{ github.sha }}'; $env:JOB_APPLIER_NO_APP = '1'
+          Get-Content scripts/install-remote.ps1 -Raw | Invoke-Expression
+          Write-Host 'PowerShell window still open after install'
+      - name: Installed app runs
+        shell: bash
+        run: |
+          D="$HOME/.job-applier-app"; [ -d "$D" ] || D="$USERPROFILE/.job-applier-app"
+          python "$D/bin/job-applier" doctor || true
+          python "$D/bin/job-applier" templates

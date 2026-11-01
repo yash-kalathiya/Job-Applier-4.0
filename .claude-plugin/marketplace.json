@@ -1,0 +1,17 @@
+{
+ "name": "job-applier",
+ "owner": {
+  "name": "Job Applier 4.0"
+ },
+ "plugins": [
+  {
+   "name": "job-applier",
+   "source": "./",
+   "description": "Job search autopilot: scrape, tailor, apply."
+  }
+ ],
+ "description": "Job Applier 4.0: job-search autopilot (scrape, tailor, apply).",
+ "metadata": {
+  "description": "Job Applier 4.0: job-search autopilot (scrape, tailor, apply)."
+ }
+}

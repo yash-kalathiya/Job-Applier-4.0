@@ -1,0 +1,57 @@
+/* apply.twinly.tech: Apple's own conventions. System font (SF Pro on Apple devices), white and #f5f5f7 surfaces,
+   one blue for links and buttons, light or dark by the visitor's system setting. No glows, gradients or decoration. */
+.site {
+  --bg: #ffffff;
+  --bg-2: #f5f5f7;
+  --bg-3: #ffffff;
+  --fg: #1d1d1f;
+  --fg-2: #6e6e73;
+  --fg-3: #86868b;
+  --line: rgb(0 0 0 / .1);
+  --blue: #0071e3;
+  --blue-text: #0066cc;
+  --green: #28a745;
+  --orange: #c45500;
+  --nav: rgb(255 255 255 / .8);
+  --shadow: 0 2px 8px rgb(0 0 0 / .04), 0 12px 40px rgb(0 0 0 / .08);
+  color-scheme: light;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+  .site {
+    --bg: #000000;
+    --bg-2: #161617;
+    --bg-3: #1d1d1f;
+    --fg: #f5f5f7;
+    --fg-2: #a1a1a6;
+    --fg-3: #86868b;
+    --line: rgb(255 255 255 / .14);
+    --blue: #0071e3;
+    --blue-text: #2997ff;
+    --green: #30d158;
+    --orange: #ff9f0a;
+    --nav: rgb(22 22 23 / .8);
+    --shadow: 0 2px 8px rgb(0 0 0 / .3), 0 12px 40px rgb(0 0 0 / .5);
+    color-scheme: dark;
+  }
+}
+html:has(.site), html:has(.site) body { background: var(--bg, #fff); }
+.site .display { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif; letter-spacing: -0.022em; }
+.site .nav { background: var(--nav); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--line); }
+.site .tile { background: var(--bg-2); border-radius: 28px; }
+.site .sheet { background: var(--bg-3); border-radius: 18px; box-shadow: var(--shadow); }
+.site .group { background: var(--bg-2); border-radius: 18px; }
+.site .group > * + * { border-top: 1px solid var(--line); }
+.site .link { color: var(--blue-text); }
+.site .link:hover { text-decoration: underline; }
+.site .btn { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 22px; border-radius: 980px;
+  background: var(--blue); color: #fff; font-size: 17px; font-weight: 500; transition: background .2s; }
+.site .btn:hover { background: #0077ed; }
+.site .muted { color: var(--fg-2); }
+.site .faint { color: var(--fg-3); }
+.site .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0; }
+.site ::selection { background: rgb(0 113 227 / .25); }

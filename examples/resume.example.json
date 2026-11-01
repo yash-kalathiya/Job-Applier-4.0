@@ -1,0 +1,69 @@
+{
+ "basics": {
+  "name": "Alex Rivera",
+  "email": "alex.rivera@example.edu",
+  "phone": "(555) 010-2048",
+  "location": "Austin, TX",
+  "links": [
+   {"label": "linkedin.com/in/alexrivera", "url": "https://linkedin.com/in/alexrivera"},
+   {"label": "github.com/alexrivera", "url": "https://github.com/alexrivera"}
+  ],
+  "headline": ["Software Engineering", "Machine Learning", "Distributed Systems"]
+ },
+ "education": [
+  {"school": "University of Texas at Austin", "location": "Austin, TX", "degree": "Bachelor of Science", "major": "Computer Science",
+   "minor": "Mathematics", "gpa": "3.86/4.00", "start": "Aug 2025", "end": "May 2029",
+   "coursework": ["Data Structures", "Algorithms", "Operating Systems", "Machine Learning", "Linear Algebra", "Probability"],
+   "honors": ["Dean's List (all semesters)", "Turing Scholars Honors"]}
+ ],
+ "experience": [
+  {"org": "Northwind Labs", "url": "https://example.com", "title": "Software Engineering Intern", "location": "Seattle, WA",
+   "start": "May 2026", "end": "Aug 2026",
+   "bullets": [
+    "Built a **Go** ingestion service on **Kafka** processing **40K events/sec**, replacing a cron pipeline and cutting data freshness from 6 hours to 90 seconds.",
+    "Reduced p99 API latency **38% (410 ms to 255 ms)** by adding a Redis read-through cache and batching PostgreSQL queries.",
+    "Shipped a React dashboard used by **3 internal teams** to debug failed jobs; added Jest tests and CI checks in GitHub Actions.",
+    "Wrote a design doc for multi-region failover reviewed by 6 senior engineers; implemented the health-check service in Go.",
+    "Participated in code reviews and on-call shadowing for the data platform team."
+   ]},
+  {"org": "UT Machine Learning Lab", "title": "Undergraduate Researcher", "location": "Austin, TX", "start": "Jan 2026", "end": "Present",
+   "bullets": [
+    "Trained a **PyTorch** vision transformer on **1.2M images** across 8 GPUs, improving defect-detection F1 from 0.81 to 0.88.",
+    "Built a data pipeline with pandas and NumPy that cleaned and deduplicated 300GB of labeled images.",
+    "Co-authored a workshop paper on label-noise robustness (**NeurIPS 2026 Workshop**)."
+   ]},
+  {"org": "Campus Tech Help Desk", "title": "IT Support Assistant", "location": "Austin, TX", "start": "Sep 2025", "end": "Dec 2025",
+   "bullets": [
+    "Resolved **600+** hardware and software tickets for students and staff with a 97% satisfaction rating.",
+    "Automated laptop imaging with Bash scripts, saving roughly 5 hours per week."
+   ]}
+ ],
+ "projects": [
+  {"name": "Ledgerly", "url": "https://github.com/alexrivera/ledgerly", "tagline": "HackTX 2025, 1st place", "tech": ["TypeScript", "Next.js", "PostgreSQL"], "date": "Oct 2025",
+   "bullets": [
+    "Built a shared-expenses app in 24 hours that won **1st of 120 teams**; now has **2,300 users**.",
+    "Designed the settlement algorithm (min-cash-flow graph) that cuts the number of payments by up to 70%."
+   ]},
+  {"name": "tinydb", "url": "https://github.com/alexrivera/tinydb", "tagline": "Key-value store from scratch", "tech": ["Rust"], "date": "Mar 2026",
+   "bullets": [
+    "Implemented an LSM-tree key-value store in **Rust** with a write-ahead log and bloom filters; 180K writes/sec on a laptop.",
+    "Wrote property-based tests that found and fixed 3 compaction bugs."
+   ]},
+  {"name": "Spotify Mood Mixer", "tech": ["Python", "Flask"], "date": "Jan 2025",
+   "bullets": ["Built a Flask app that clusters a user's songs by audio features with k-means and generates mood playlists."]}
+ ],
+ "research": [
+  {"title": "Robust Defect Detection Under Label Noise", "venue": "NeurIPS 2026 Workshop", "role": "Co-author", "url": "https://example.com/paper"}
+ ],
+ "leadership": [
+  {"org": "Women in Computing at UT", "title": "Technical Workshops Lead", "start": "Sep 2025", "end": "Present",
+   "bullets": ["Run biweekly Git and Python workshops for **80+ students**; grew attendance 3x in one semester."]}
+ ],
+ "skills": [
+  {"label": "Languages", "items": ["Python", "Go", "Rust", "TypeScript", "Java", "C++", "SQL", "Bash"]},
+  {"label": "Frameworks", "items": ["React", "Next.js", "Flask", "PyTorch", "pandas", "NumPy"]},
+  {"label": "Tools", "items": ["Kafka", "Redis", "PostgreSQL", "Docker", "Kubernetes", "AWS", "Git", "GitHub Actions", "Linux"]}
+ ],
+ "awards": ["HackTX 2025, 1st place (of 120 teams)", "Turing Scholars Honors Program"],
+ "order": ["education", "experience", "projects", "research", "leadership", "skills", "awards"]
+}

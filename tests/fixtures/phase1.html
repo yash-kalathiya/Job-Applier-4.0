@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Phase 1 synthetic software application</title>
+<style>body{font:16px system-ui;max-width:780px;margin:40px auto}fieldset{margin:20px 0;padding:20px}label{display:block;margin:12px 0}input,select,textarea{padding:8px}#visa-options{padding:8px;border:1px solid #999}#visa-options [role=option]{padding:8px}</style></head><body>
+<h1>Software Engineer · Synthetic fixture</h1><form id="application">
+<label for="email">Email *</label><input id="email" type="email" required maxlength="100">
+<label for="conflict">Current city</label><input id="conflict" aria-label="Preferred work location">
+<fieldset><legend>Are you willing to relocate?</legend><label><input type="radio" name="relocate" value="yes" required>Yes</label><label><input type="radio" name="relocate" value="no">No</label></fieldset>
+<fieldset><legend>Languages used</legend><label><input type="checkbox" name="languages" value="python">Python</label><label><input type="checkbox" name="languages" value="go">Go</label></fieldset>
+<fieldset><legend>Current education</legend><label for="start-a">Start date</label><input id="start-a" type="date"></fieldset>
+<fieldset><legend>Previous employment</legend><label for="start-b">Start date</label><input id="start-b" type="date"></fieldset>
+<label for="degree">Degree</label><select id="degree" aria-required="false"><option value="" disabled selected>Select a degree</option><option value="bs">Bachelor's</option><option value="ms">Master's</option><option value="phd" disabled>PhD</option></select>
+<label for="visa">Visa status</label><input id="visa" role="combobox" aria-controls="visa-options" aria-expanded="false" autocomplete="off">
+<input id="validation-proxy" required tabindex="-1" aria-hidden="true" style="opacity:0;pointer-events:none">
+<div id="visa-options" role="listbox" aria-label="Visa choices" hidden><div role="option" id="opt-student" data-value="student">Student visa</div><div role="option" id="opt-other" data-value="other">Other</div></div>
+<label for="gpa">GPA</label><input id="gpa" type="number" min="0" max="4" step="0.001" aria-describedby="gpa-help"><p id="gpa-help">Use a 4 point scale.</p>
+<div class="field"><label for="resume">Resume *</label><input style="display:none" id="resume" type="file" accept=".pdf"></div>
+<div role="group" aria-label="Cover letter*"><label for="cover" style="position:absolute;width:1px;height:1px;clip:rect(0px,0px,0px,0px)">Attach</label><input id="cover" type="file" style="position:absolute;width:1px;height:1px;clip:rect(0px,0px,0px,0px)"><button type="button">Attach</button><button type="button">Enter manually</button></div>
+<label for="conditional">Additional explanation</label><textarea hidden id="conditional"></textarea>
+<input type="hidden" name="csrf" value="synthetic-no-secret">
+<p>Complete the <a href="https://example.invalid/questionnaire">supplemental questionnaire</a> first.</p>
+<button type="submit">Submit application</button></form>
+<iframe title="Supplemental questions" srcdoc="<label for='link'>Portfolio URL</label><input id='link' type='url'>"></iframe>
+<div id="shadow-host"></div>
+<script>
+const visa=document.querySelector('#visa'),list=document.querySelector('#visa-options');
+visa.addEventListener('click',()=>{list.hidden=false;visa.setAttribute('aria-expanded','true')});
+visa.addEventListener('keydown',e=>{if(e.key==='Escape'){list.hidden=true;visa.setAttribute('aria-expanded','false')}});
+document.querySelector('#degree').addEventListener('change',()=>{document.querySelector('#conditional').hidden=false});
+document.querySelector('#shadow-host').attachShadow({mode:'open'}).innerHTML='<label for="github">GitHub URL</label><input id="github" type="url">';
+window.submissions=0;document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();window.submissions++});
+</script></body></html>

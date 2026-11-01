@@ -1,0 +1,13 @@
+*.pyc
+.DS_Store
+.applytwin/
+.env*
+.vercel/
+__pycache__/
+/site/
+ui/node_modules/
+INSTALLED
+.venv-phase1/
+/artifacts/phase1/
+/.cache-phase2/
+/artifacts/phase2/

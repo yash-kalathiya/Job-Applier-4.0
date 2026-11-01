@@ -1,0 +1,1 @@
+{"mcpServers": {"job_applier": {"command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/bin/job-applier", "mcp"]}}}

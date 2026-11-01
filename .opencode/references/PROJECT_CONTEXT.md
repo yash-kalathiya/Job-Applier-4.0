@@ -1,0 +1,19 @@
+# Proposed context for the current project (must be verified locally)
+
+This context concerns the project **`job_application_4`**, with an October 30, 2026 draft proposing parts of an ApplyTwin -> Job Applier 4.0 redesign. This is a PLAN, NOT evidence that these changes exist or are approved. Read the actual repository and ask before implementing incompatible decisions.
+
+- Target project: `job_application_4` (suggested path `/home/yash/Project/job_application_4`; verify it exists and inspect the real Git worktree). ApplyTwin checkout at `/home/yash/Project/applytwin` is a distinct candidate reference, NOT assumed to be this project. The draft describes React UI, Python backend/CLI, local records, auth, job queue, resume rendering, answer bank and MCP tools; verify what really exists in this target checkout.
+- Candidate earlier reference: `https://github.com/yash-kalathiya/Job_application_2.0`, particularly its Greenhouse extractor, mapper and filler. Don't copy/reuse restricted code without confirming rights and attribution requirements.
+- CRITICAL LICENSE GATE: draft reports ApplyTwin code is licensed under PolyForm Strict 1.0.0, which may forbid modifications and derivative works without further permission. Before copying/migrating restricted ApplyTwin code into `job_application_4`, verify its license and the user's rights/permission; do not assume permission merely because it is locally installed or renamed. Independent code authored in the user's own repository may have different rights; examine the actual target license.
+- Draft says the earlier ApplyTwin working tree contained uncommitted authentication changes; do not assume these exist in `job_application_4`. Preserve any actual local uncommitted changes found in either checkout. Do not blindly check out, reset, stash, rebase or overwrite.
+- Draft objective: accurate, token-conscious application form automation with extract -> resolve -> fill -> verify and explicit human review prior to any employer submission.
+- Browser evidence: combine Playwright DOM + accessibility snapshots. Preserve multiple controls per question, option IDs, frame scope, constraints, conditional behavior; never select first match on ambiguity.
+- Answer resolution proposal: approved verified answers/rules -> local semantic retrieval -> Qwen 3.8 27B via Groq or configured provider -> Codex fallback -> user for missing facts. LLM outputs are suggestions and require fact/option validation.
+- Guardrails: never invent personal details, never bypass CAPTCHA/authentication, never submit jobs automatically, never leak credentials, no remote side effects during fixtures, no duplicate submit on timeout.
+- Target order from draft: Greenhouse, then Ashby, then Lever. Begin with small independently verifiable milestones and synthetic Playwright fixtures; require explicit approval for every final application.
+- Suggested quality targets: extracted control/option accuracy, full-form correctness, recovery efficiency, human intervention, latency, token usage, duplicates, and auditability.
+- Existing MCP: `job_applier` tools may include mutable application/answer/vault actions. This team configuration DENIES their use by default. For any future allowlisting, configure per-tool least privilege and get explicit permission.
+- Separate code publication approval from any employment application submission approval. Github push is not approval to submit a form.
+
+- External coding-guidelines source: `https://github.com/multica-ai/andrej-karpathy-skills.git`, skill ID `karpathy-guidelines`. This is an MIT-licensed community adaptation, **not Andrej Karpathy's own repository**. Local `compact-coding` remains a complementary team standard.
+- External security source: `https://github.com/cloudflare/security-audit-skill`, skill ID `security-audit`. Both external skills must be installed into this project explicitly before claiming to follow them.
