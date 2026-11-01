@@ -4,6 +4,7 @@
   job-applier scan                scrape every source and score matches
   job-applier jobs [query]        list top matches
   job-applier extract URL --out DIRECTORY   inspect questions with DOM + accessibility (Phase 1)
+  job-applier resolve QUESTIONS.json --out ANSWERS.json   match questions to facts (Phase 2)
   job-applier tailor JOB_ID [--template classic] [--plan plan.json]
   job-applier render [--template classic]       master resume PDF
   job-applier ats [JOB_ID]        ATS report for the vault (vs a job)
@@ -50,6 +51,9 @@ def main():
     elif cmd == 'extract':
         from .extraction.__main__ import main as extract
         sys.exit(extract(sys.argv[2:]))
+    elif cmd == 'resolve':
+        from .resolution.__main__ import main as resolve
+        sys.exit(resolve(sys.argv[2:]))
     elif cmd == 'mcp':
         from .mcp import main as m
         m()
