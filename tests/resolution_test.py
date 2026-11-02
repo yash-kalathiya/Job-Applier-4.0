@@ -44,7 +44,7 @@ def make_bank():
             {
                 'fact': 'work.us_sponsorship_now_or_future',
                 'input_types': ['single_choice', 'combobox', 'select', 'radio'],
-                'aliases': ['Will you require sponsorship?'],
+                'aliases': ['Will you now or in the future require sponsorship for employment visa status?'],
             },
             {
                 'fact': 'work.authorized_us',
@@ -1190,6 +1190,1040 @@ class TestRegressionReviewFixes(unittest.TestCase):
             # Parent directory mode 0700
             parent_mode = stat.S_IMODE(target_file.parent.stat().st_mode)
             self.assertEqual(parent_mode, 0o700)
+
+
+class TestPriorEmployeeResolution(unittest.TestCase):
+    def setUp(self):
+        from job_applier.resolution.__main__ import _build_bank_from_profile_and_answers
+        self._build_bank = _build_bank_from_profile_and_answers
+
+    def test_absent_employer_complex_greenhouse_options(self):
+        # Absent employer: question asks about Affirm, resume has Acme Corp
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-prior-absent',
+            text='Have you previously been employed at Affirm for any length of time?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-yes', 'label': 'I have previously been employed at Affirm', 'value': 'yes'},
+                    {'id': 'opt-no', 'label': 'I have not previously been employed at Affirm', 'value': 'no'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'I have not previously been employed at Affirm')
+        self.assertEqual(res['selected_option']['id'], 'opt-no')
+        self.assertEqual(res['selected_option']['label'], 'I have not previously been employed at Affirm')
+        self.assertEqual(res['source'], 'resume_absence')
+
+    def test_generic_yes_no_question(self):
+        # Generic Yes/No question -> resolves to ready, selects "No"
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-prior-yesno',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'No')
+        self.assertEqual(res['selected_option']['id'], 'opt-n')
+        self.assertEqual(res['source'], 'resume_absence')
+
+    def test_known_employer_on_resume_abstains(self):
+        # Known employer on resume -> abstains with needs_user and reason 'prior_employer_present_in_resume'
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-prior-known',
+            text='Have you previously worked at Acme Corp?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'prior_employer_present_in_resume')
+        self.assertIsNone(res['fact_key'])
+        self.assertIsNone(res['answer'])
+
+    def test_former_employee_alias(self):
+        # Former employee alias -> resolves to ready, selects "No"
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-prior-former',
+            text='Are you a former employee of this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'No')
+        self.assertEqual(res['selected_option']['id'], 'opt-n')
+        self.assertEqual(res['source'], 'resume_absence')
+
+    def test_known_employer_from_profile_org_abstains(self):
+        # Known employer extracted from profile experience using 'org' field
+        profile = {'experience': [{'org': 'Beta Dynamics'}]}
+        bank = self._build_bank(profile, [])
+        q = make_question(
+            question_id='q-prior-profile-org',
+            text='Have you ever worked at Beta Dynamics?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'prior_employer_present_in_resume')
+        self.assertIsNone(res['fact_key'])
+        self.assertIsNone(res['answer'])
+
+    def test_negative_options_variations(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+
+        # "I have never worked at this company"
+        q1 = make_question(
+            question_id='q-never',
+            text='Have you previously been employed at this company for any length of time?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-1', 'label': 'I have worked here before', 'value': 'worked'},
+                    {'id': 'opt-2', 'label': 'I have never worked at this company', 'value': 'never'},
+                ],
+                'complete': True,
+            },
+        )
+        res1 = resolve_exact(q1, bank)
+        self.assertEqual(res1['status'], 'ready')
+        self.assertEqual(res1['answer'], 'I have never worked at this company')
+        self.assertEqual(res1['selected_option']['id'], 'opt-2')
+
+        # "Not a former employee"
+        q2 = make_question(
+            question_id='q-not-former',
+            text='Former Employee',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-1', 'label': 'Former employee', 'value': 'former'},
+                    {'id': 'opt-2', 'label': 'Not a former employee', 'value': 'not_former'},
+                ],
+                'complete': True,
+            },
+        )
+        res2 = resolve_exact(q2, bank)
+        self.assertEqual(res2['status'], 'ready')
+        self.assertEqual(res2['answer'], 'Not a former employee')
+        self.assertEqual(res2['selected_option']['id'], 'opt-2')
+
+    def test_government_federal_public_excluded(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-gov',
+            text='Were you previously employed by the federal government?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        key, reason = exact_match(q, bank)
+        self.assertNotEqual(key, 'work.prior_employee')
+        self.assertEqual(key, None)
+        self.assertEqual(reason, 'no_exact_match')
+
+    def test_skill_and_remote_questions_do_not_match_prior_employee(self):
+        bank = self._build_bank({}, [])
+        skill_remote_questions = [
+            'Have you previously worked with Python?',
+            'Have you ever worked remotely?',
+            'Have you worked using Docker?',
+            'Have you previously worked on night shifts?',
+            'Have you previously worked weekends or overtime?',
+            'Have you worked with distributed systems?',
+            'Have you previously worked on machine learning projects?',
+        ]
+        for q_text in skill_remote_questions:
+            q = make_question(
+                question_id=f"q-skill-{abs(hash(q_text)) % 10000}",
+                text=q_text,
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                        {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                    ],
+                    'complete': True,
+                },
+            )
+            key, reason = exact_match(q, bank)
+            self.assertNotEqual(key, 'work.prior_employee', f"Question '{q_text}' incorrectly matched prior_employee")
+            self.assertEqual(key, None)
+            res = resolve_exact(q, bank)
+            self.assertEqual(res['status'], 'needs_user')
+            self.assertIsNone(res['fact_key'])
+
+    def test_positive_option_with_negation_clause_abstains(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-pos-neg-clause',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {
+                        'id': 'opt-1',
+                        'label': 'I was previously employed, but not at this company',
+                        'value': 'was_employed',
+                    },
+                    {
+                        'id': 'opt-2',
+                        'label': 'Yes, currently employed',
+                        'value': 'currently_employed',
+                    },
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'option_not_uniquely_observed')
+        self.assertIsNone(res.get('selected_option'))
+        self.assertIsNone(res['fact_key'])
+        self.assertIsNone(res['answer'])
+
+    def test_employer_substring_intra_token_does_not_abstain(self):
+        # Candidate worked at 'Cat' and 'In' and 'Co' (intra-token substrings or stopwords)
+        resume = {'experience': [{'company': 'Cat'}, {'company': 'In'}, {'company': 'Co'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-intra-token',
+            text='Have you previously been employed at Affirm for any length of time?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-yes', 'label': 'I have previously been employed at Affirm', 'value': 'yes'},
+                    {'id': 'opt-no', 'label': 'I have not previously been employed at Affirm', 'value': 'no'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        # Word boundary and stopword guards prevent false abstain
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'I have not previously been employed at Affirm')
+        self.assertEqual(res['selected_option']['id'], 'opt-no')
+
+    def test_corporate_suffix_matching_abstains(self):
+        # Candidate worked at 'Acme Corp'; question asks about core name 'Acme'
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-corp-suffix',
+            text='Have you previously worked at Acme?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'prior_employer_present_in_resume')
+        self.assertIsNone(res['fact_key'])
+
+        # Also test LLC suffix
+        resume_llc = {'experience': [{'company': 'Globex LLC'}]}
+        bank_llc = self._build_bank({}, [], resume=resume_llc)
+        q_llc = make_question(
+            question_id='q-llc-suffix',
+            text='Have you ever worked at Globex?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res_llc = resolve_exact(q_llc, bank_llc)
+        self.assertEqual(res_llc['status'], 'needs_user')
+        self.assertEqual(res_llc['reason'], 'prior_employer_present_in_resume')
+
+    def test_build_bank_handles_none_profile_and_schema_variants(self):
+        # 1. profile = None must not raise AttributeError
+        bank = self._build_bank(None, [])
+        self.assertIn('facts', bank)
+        self.assertIn('questions', bank)
+        self.assertIn('work.prior_employee', bank['facts'])
+
+        # 2. Schema variants for employer: company, org, name, employer, organization
+        profile = {
+            'experience': [
+                {'name': 'Company Alpha'},
+                {'employer': 'Beta Systems'},
+            ]
+        }
+        resume = {
+            'experience': [
+                {'organization': 'Gamma Labs'},
+                {'org': 'Delta Tech'},
+                {'company': 'Epsilon Inc'},
+            ]
+        }
+        bank_variants = self._build_bank(profile, [], resume=resume)
+        known_employers = bank_variants['facts']['work.prior_employee']['known_employers']
+        self.assertIn('company alpha', known_employers)
+        self.assertIn('beta systems', known_employers)
+        self.assertIn('gamma labs', known_employers)
+        self.assertIn('delta tech', known_employers)
+        self.assertIn('epsilon inc', known_employers)
+
+    def test_user_answers_override_prior_employee_default(self):
+        # Explicit user answer 'Yes' overrides default 'No'
+        raw_answers = [
+            {'key': 'prior_employee', 'answer': 'Yes', 'source': 'user_vault'},
+        ]
+        bank = self._build_bank({}, raw_answers)
+        fact = bank['facts']['work.prior_employee']
+        self.assertEqual(fact['value'], 'Yes')
+        self.assertEqual(fact['source'], 'user_vault')
+        self.assertTrue(fact['confirmed'])
+
+        # Question resolution selects 'Yes'
+        q = make_question(
+            question_id='q-override-yes',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'Yes')
+        self.assertEqual(res['selected_option']['id'], 'opt-y')
+        self.assertEqual(res['source'], 'user_vault')
+
+    def test_general_experience_questions_do_not_match_prior_employee(self):
+        bank = self._build_bank({}, [])
+        general_experience_questions = [
+            'Have you ever worked at scale?',
+            'Have you ever worked at a startup?',
+            'Have you ever worked for an agency?',
+            'Have you previously worked in an enterprise environment?',
+            'Do you affirm that you have previously worked in an office?',
+        ]
+        for q_text in general_experience_questions:
+            q = make_question(
+                question_id=f"q-gen-{abs(hash(q_text)) % 10000}",
+                text=q_text,
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                        {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                    ],
+                    'complete': True,
+                },
+            )
+            key, reason = exact_match(q, bank)
+            self.assertNotEqual(key, 'work.prior_employee', f"Question '{q_text}' incorrectly matched prior_employee")
+            self.assertIsNone(key)
+            res = resolve_exact(q, bank)
+            self.assertEqual(res['status'], 'needs_user')
+            self.assertIsNone(res['fact_key'])
+
+    def test_negative_option_guard_rejects_affirmative_contractor_option(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        # Option starting with 'No' but affirming contractor work
+        q1 = make_question(
+            question_id='q-contractor-reject',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-1', 'label': 'Yes, I was a full-time employee', 'value': 'full_time'},
+                    {'id': 'opt-2', 'label': 'No, I worked here as a contractor', 'value': 'contractor'},
+                ],
+                'complete': True,
+            },
+        )
+        res1 = resolve_exact(q1, bank)
+        self.assertEqual(res1['status'], 'needs_user')
+        self.assertEqual(res1['reason'], 'option_not_uniquely_observed')
+        self.assertIsNone(res1.get('selected_option'))
+
+        # When a true negative option is also present, it selects the true negative
+        q2 = make_question(
+            question_id='q-contractor-with-never',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-1', 'label': 'Yes, I was an employee', 'value': 'emp'},
+                    {'id': 'opt-2', 'label': 'No, I worked here as a contractor', 'value': 'contractor'},
+                    {'id': 'opt-3', 'label': 'No, I have never worked here', 'value': 'never'},
+                ],
+                'complete': True,
+            },
+        )
+        res2 = resolve_exact(q2, bank)
+        self.assertEqual(res2['status'], 'ready')
+        self.assertEqual(res2['answer'], 'No, I have never worked here')
+        self.assertEqual(res2['selected_option']['id'], 'opt-3')
+
+    def test_resume_with_the_company_does_not_falsely_abstain_on_the_word(self):
+        # Employer named 'The Company' -> 'the' must be in EMPLOYER_STOPWORDS so it doesn't match 'the' in questions
+        resume = {'experience': [{'company': 'The Company'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-the-stopword',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'No')
+        self.assertEqual(res['selected_option']['id'], 'opt-n')
+
+    def test_standard_json_resume_work_key_extracted(self):
+        # Standard JSON Resume schema uses top-level 'work' key with 'name'
+        resume = {
+            'work': [
+                {'name': 'Initech LLC', 'position': 'Software Engineer'}
+            ]
+        }
+        bank = self._build_bank({}, [], resume=resume)
+        known_employers = bank['facts']['work.prior_employee']['known_employers']
+        self.assertIn('initech llc', known_employers)
+
+        # Question mentioning Initech should abstain because employer is on resume
+        q = make_question(
+            question_id='q-initech-prior',
+            text='Have you previously worked at Initech?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'prior_employer_present_in_resume')
+
+    def test_resolve_cascade_handles_question_id_key_safely(self):
+        from job_applier.resolution.__main__ import NullSemanticMatcher
+        bank = self._build_bank({}, [])
+        q = {
+            'question_id': 'qid-cascade-test',
+            'text': 'Some unknown question that requires user input?',
+            'input_type': 'single_choice',
+            'options': {
+                'items': [
+                    {'id': 'opt-1', 'label': 'Option A', 'value': 'A'},
+                    {'id': 'opt-2', 'label': 'Option B', 'value': 'B'},
+                ],
+                'complete': True,
+            },
+        }
+        out = resolve_cascade([q], bank, NullSemanticMatcher())
+        self.assertIn('results', out)
+        self.assertEqual(len(out['results']), 1)
+        self.assertEqual(out['results'][0]['question_id'], 'qid-cascade-test')
+        self.assertEqual(out['results'][0]['status'], 'needs_user')
+
+        pending = pending_questions([q], out['results'], scope='greenhouse')
+        self.assertEqual(len(pending), 1)
+        self.assertIn('pending_id', pending[0])
+
+    def test_negative_option_guard_rejects_affirmative_contractor_bypass(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-contractor-bypass',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-1', 'label': 'Yes, I was an employee', 'value': 'employee'},
+                    {'id': 'opt-2', 'label': 'No, not an employee, I worked here as a contractor', 'value': 'contractor'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'option_not_uniquely_observed')
+        self.assertIsNone(res.get('selected_option'))
+
+    def test_resume_with_the_company_does_not_abstain_on_standard_question(self):
+        resume = {'experience': [{'company': 'The Company'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-the-company-std',
+            text='Have you previously worked for the company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], 'No')
+        self.assertEqual(res['selected_option']['id'], 'opt-n')
+
+    def test_general_work_at_another_company_does_not_match_prior_employee(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        q = make_question(
+            question_id='q-another-company',
+            text='Have you previously worked at another company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        key, reason = exact_match(q, bank)
+        self.assertNotEqual(key, 'work.prior_employee')
+        self.assertIsNone(key)
+        self.assertEqual(reason, 'no_exact_match')
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertIsNone(res['fact_key'])
+
+    def test_sponsorship_without_temporality_does_not_match_us_sponsorship(self):
+        bank = self._build_bank({}, [])
+        q = make_question(
+            question_id='q-sponsorship-notemp',
+            text='Will you require sponsorship?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        key, reason = exact_match(q, bank)
+        self.assertNotEqual(key, 'work.us_sponsorship_now_or_future')
+        self.assertIsNone(key)
+        self.assertEqual(reason, 'no_exact_match')
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertIsNone(res['fact_key'])
+
+    def test_negative_option_guard_rejects_internship_and_apprentice_variants(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        labels_to_reject = [
+            'No, completed an internship here',
+            'No, interned at this company',
+            'No, was an apprentice here',
+            'No, completed an apprenticeship',
+            'No, worked as a consultant',
+            'No, was a temp worker',
+            'No, temporary employee',
+            'No, seasonal worker',
+            'No, worked as a vendor',
+            'No, was a coop',
+            'No, was a fellow',
+            'No, was an extern',
+        ]
+        for idx, lbl in enumerate(labels_to_reject):
+            # When only affirmative and this pseudo-negative role option are present, must abstain
+            q1 = make_question(
+                question_id=f'q-reject-role-{idx}',
+                text='Have you previously worked for this company?',
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-1', 'label': 'Yes, I was a regular employee', 'value': 'regular'},
+                        {'id': 'opt-2', 'label': lbl, 'value': 'role_val'},
+                    ],
+                    'complete': True,
+                },
+            )
+            res1 = resolve_exact(q1, bank)
+            self.assertEqual(res1['status'], 'needs_user', f"Option '{lbl}' was not rejected")
+            self.assertEqual(res1['reason'], 'option_not_uniquely_observed')
+            self.assertIsNone(res1.get('selected_option'))
+
+            # When a true negative option is also present, it selects the true negative
+            q2 = make_question(
+                question_id=f'q-true-neg-{idx}',
+                text='Have you previously worked for this company?',
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-1', 'label': 'Yes, I was a regular employee', 'value': 'regular'},
+                        {'id': 'opt-2', 'label': lbl, 'value': 'role_val'},
+                        {'id': 'opt-3', 'label': 'No, I have never worked here', 'value': 'never'},
+                    ],
+                    'complete': True,
+                },
+            )
+            res2 = resolve_exact(q2, bank)
+            self.assertEqual(res2['status'], 'ready', f"Option '{lbl}' interfered with true negative")
+            self.assertEqual(res2['answer'], 'No, I have never worked here')
+            self.assertEqual(res2['selected_option']['id'], 'opt-3')
+
+    def test_office_near_here_does_not_match_prior_employee(self):
+        bank = self._build_bank({}, [])
+        q = make_question(
+            question_id='q-office-near-here',
+            text='Have you ever worked in an office near here?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        key, reason = exact_match(q, bank)
+        self.assertNotEqual(key, 'work.prior_employee')
+        self.assertIsNone(key)
+        self.assertEqual(reason, 'no_exact_match')
+        res = resolve_exact(q, bank)
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertIsNone(res['fact_key'])
+
+    def test_render_handles_fact_without_source_key(self):
+        bank = {
+            'facts': {
+                'contact.email': {
+                    'value': 'test@example.com',
+                    'confirmed': True,
+                }
+            },
+            'questions': [
+                {
+                    'fact': 'contact.email',
+                    'input_types': ['text', 'email'],
+                    'aliases': ['Email Address'],
+                }
+            ]
+        }
+        q = make_question(question_id='q-email-no-source', text='Email Address', input_type='text')
+        res = render(q, 'contact.email', bank, 'exact', 'test_exact_reason')
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['source'], 'vault')
+        self.assertEqual(res['answer'], 'test@example.com')
+
+    def test_exact_match_handles_malformed_bank_safely(self):
+        q = make_question(question_id='q-malformed', text='Email Address', input_type='text')
+
+        # 1. Bank completely missing 'questions' key
+        key1, reason1 = exact_match(q, {})
+        self.assertIsNone(key1)
+        self.assertEqual(reason1, 'no_exact_match')
+
+        # 2. Bank with 'questions' set to None
+        key2, reason2 = exact_match(q, {'questions': None})
+        self.assertIsNone(key2)
+        self.assertEqual(reason2, 'no_exact_match')
+
+        # 3. Entries missing 'aliases' or 'fact' or not dictionaries
+        malformed_bank = {
+            'questions': [
+                None,
+                'invalid_entry_string',
+                {},
+                {'fact': None, 'aliases': ['Email Address']},
+                {'fact': 'contact.email', 'aliases': None, 'input_types': ['text']},
+                {'fact': 'contact.email', 'input_types': ['text']},
+            ]
+        }
+        key3, reason3 = exact_match(q, malformed_bank)
+        self.assertIsNone(key3)
+        self.assertEqual(reason3, 'no_exact_match')
+
+        # 4. Bank with malformed entries alongside valid entry matches correctly
+        valid_bank = {
+            'questions': [
+                None,
+                {},
+                {'fact': 'contact.email', 'aliases': None},
+                {'fact': 'contact.email', 'aliases': ['Email Address'], 'input_types': ['text']},
+            ]
+        }
+        key4, reason4 = exact_match(q, valid_bank)
+        self.assertEqual(key4, 'contact.email')
+        self.assertEqual(reason4, 'normalized_exact_alias')
+
+    def test_render_handles_malformed_bank_questions_safely(self):
+        q = make_question(question_id='q-render-malformed', text='Email Address', input_type='text')
+        bank_facts = {
+            'facts': {
+                'contact.email': {
+                    'value': 'user@example.com',
+                    'confirmed': True,
+                    'source': 'vault',
+                }
+            }
+        }
+
+        # 1. bank['questions'] is None
+        bank_none_q = dict(bank_facts, questions=None)
+        res1 = render(q, 'contact.email', bank_none_q, 'exact', 'test_reason')
+        self.assertEqual(res1['status'], 'needs_user')
+        self.assertEqual(res1['reason'], 'incompatible_fact_type_or_scope')
+
+        # 2. bank['questions'] contains non-dicts and malformed items
+        bank_malformed_q = dict(bank_facts, questions=[
+            None,
+            'not-a-dict',
+            123,
+            {},
+            {'fact': None},
+            {'fact': 'contact.email', 'input_types': ['text'], 'aliases': ['Email Address']},
+        ])
+        res2 = render(q, 'contact.email', bank_malformed_q, 'exact', 'test_reason')
+        self.assertEqual(res2['status'], 'ready')
+        self.assertEqual(res2['answer'], 'user@example.com')
+
+    def test_exact_match_and_render_handle_none_facts_safely(self):
+        q_prior = make_question(
+            question_id='q-prior-emp-test',
+            text='Have you previously worked for this company?',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-y', 'label': 'Yes', 'value': 'Y'},
+                    {'id': 'opt-n', 'label': 'No', 'value': 'N'},
+                ],
+                'complete': True,
+            },
+        )
+        q_text = make_question(question_id='q-email-test', text='Email Address', input_type='text')
+
+        # 1. bank with facts=None
+        bank_none_facts = {
+            'facts': None,
+            'questions': [
+                {'fact': 'contact.email', 'input_types': ['text'], 'aliases': ['Email Address']},
+            ],
+        }
+        # exact_match on prior employee text should not crash when facts is None
+        key1, reason1 = exact_match(q_prior, bank_none_facts)
+        self.assertEqual(key1, 'work.prior_employee')
+
+        # exact_match on normal question should not crash
+        key2, reason2 = exact_match(q_text, bank_none_facts)
+        self.assertEqual(key2, 'contact.email')
+
+        # render should not crash when facts is None, should abstain
+        res1 = render(q_text, 'contact.email', bank_none_facts, 'exact', None)
+        self.assertEqual(res1['status'], 'needs_user')
+        self.assertEqual(res1['reason'], 'no_supported_fact')
+
+        # 2. bank missing 'facts' key entirely
+        bank_empty = {'questions': []}
+        key3, reason3 = exact_match(q_prior, bank_empty)
+        self.assertEqual(key3, 'work.prior_employee')
+        res2 = render(q_text, 'contact.email', bank_empty, 'exact', None)
+        self.assertEqual(res2['status'], 'needs_user')
+        self.assertEqual(res2['reason'], 'no_supported_fact')
+
+    def test_cascade_does_not_clobber_resolved_question_sharing_none_id(self):
+        from job_applier.resolution.__main__ import NullSemanticMatcher
+        bank = {
+            'facts': {
+                'contact.email': {
+                    'value': 'user@example.com',
+                    'confirmed': True,
+                    'source': 'vault',
+                },
+                'other.fact': {
+                    'value': 'other_value',
+                    'confirmed': True,
+                    'source': 'vault',
+                },
+            },
+            'questions': [
+                {
+                    'fact': 'contact.email',
+                    'input_types': ['text'],
+                    'aliases': ['Email Address'],
+                },
+                {
+                    'fact': 'other.fact',
+                    'input_types': ['text'],
+                    'aliases': ['Other Question'],
+                },
+            ],
+        }
+        # q1 matches exact alias and resolves to ready. Has no id / question_id (None).
+        q1 = {
+            'text': 'Email Address',
+            'input_type': 'text',
+        }
+        # q2 has no exact match and needs_user. Also has no id / question_id (None).
+        q2 = {
+            'text': 'Completely unknown question not in bank',
+            'input_type': 'text',
+        }
+
+        class MockLLM:
+            def match(self, unresolved, bank):
+                return {None: {'fact_key': 'other.fact', 'reason': 'llm_matched'}}, [{'tier': 'llm'}]
+
+        cascade_result = resolve_cascade([q1, q2], bank, NullSemanticMatcher(), llm=MockLLM())
+        results = cascade_result['results']
+        self.assertEqual(len(results), 2)
+        # q1 was resolved by exact match to 'ready'. Cascade must NOT clobber it to llm/other.fact.
+        self.assertEqual(results[0]['status'], 'ready')
+        self.assertEqual(results[0]['fact_key'], 'contact.email')
+        self.assertEqual(results[0]['answer'], 'user@example.com')
+        self.assertEqual(results[0]['tier'], 'exact')
+
+        # q2 was unresolved, so it gets updated by llm
+        self.assertEqual(results[1]['fact_key'], 'other.fact')
+        self.assertEqual(results[1]['tier'], 'qwen')
+        self.assertEqual(results[1]['reason'], 'llm_matched')
+
+    def test_negative_option_guard_rejects_hyphenated_coop_and_subcontractor(self):
+        resume = {'experience': [{'company': 'Acme Corp'}]}
+        bank = self._build_bank({}, [], resume=resume)
+        labels_to_reject = [
+            'No, was a co-op',
+            'No, I was a co-op',
+            'No, co-op',
+            'No, former co-op',
+            'No, was a co op',
+            'No, was a subcontractor',
+            'No, freelance',
+            'No, freelancer',
+        ]
+        for idx, lbl in enumerate(labels_to_reject):
+            # 1. When paired only with an affirmative option, resolve_exact() returns
+            # status == 'needs_user', reason == 'option_not_uniquely_observed', and selected_option is None
+            q1 = make_question(
+                question_id=f'q-reject-coop-{idx}',
+                text='Have you previously worked for this company?',
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-1', 'label': 'Yes, regular employee', 'value': 'regular'},
+                        {'id': 'opt-2', 'label': lbl, 'value': 'reject_val'},
+                    ],
+                    'complete': True,
+                },
+            )
+            res1 = resolve_exact(q1, bank)
+            self.assertEqual(res1['status'], 'needs_user', f"Option '{lbl}' was not rejected")
+            self.assertEqual(res1['reason'], 'option_not_uniquely_observed')
+            self.assertIsNone(res1.get('selected_option'))
+
+            # 2. When paired with a true negative option, cleanly selects the true negative option with status == 'ready'
+            q2 = make_question(
+                question_id=f'q-true-neg-coop-{idx}',
+                text='Have you previously worked for this company?',
+                input_type='single_choice',
+                options={
+                    'items': [
+                        {'id': 'opt-1', 'label': 'Yes, regular employee', 'value': 'regular'},
+                        {'id': 'opt-2', 'label': lbl, 'value': 'reject_val'},
+                        {'id': 'opt-3', 'label': 'No, I have never worked here', 'value': 'never'},
+                    ],
+                    'complete': True,
+                },
+            )
+            res2 = resolve_exact(q2, bank)
+            self.assertEqual(res2['status'], 'ready', f"Option '{lbl}' interfered with true negative")
+            self.assertEqual(res2['answer'], 'No, I have never worked here')
+            self.assertEqual(res2['selected_option']['id'], 'opt-3')
+
+
+class TestG02Round6Rework(unittest.TestCase):
+    def test_qwen_match_handles_none_and_malformed_facts(self):
+        import json
+        from unittest.mock import patch
+        from job_applier.resolution.qwen import QwenMatcher
+
+        with patch.dict(os.environ, {'GROQ_API_KEY': 'fake-key'}):
+            matcher = QwenMatcher()
+
+        bank = {
+            'facts': {
+                'bad': None,
+                'other': 'str',
+                'valid': {'value': 'val', 'confirmed': True},
+            }
+        }
+        # Calling match with empty questions parses facts without network calls or AttributeError
+        predictions, calls = matcher.match([], bank)
+        self.assertEqual(predictions, {})
+        self.assertEqual(calls, [])
+
+        # Also verify with a question to ensure payload generation uses parsed facts without error
+        q = {'id': 'q1', 'text': 'Question 1', 'input_type': 'text'}
+        with patch.object(matcher.client, 'post') as mock_post:
+            mock_post.return_value.status_code = 400
+            mock_post.return_value.headers = {}
+            matcher.match([q], bank)
+            self.assertTrue(mock_post.called)
+            sent_payload = json.loads(mock_post.call_args[1]['json']['messages'][1]['content'])
+            self.assertIn('valid', sent_payload['facts'])
+            self.assertEqual(sent_payload['facts']['valid']['value'], 'val')
+            self.assertNotIn('bad', sent_payload['facts'])
+            self.assertNotIn('other', sent_payload['facts'])
+
+    def test_qwen_match_handles_none_options(self):
+        import json
+        from unittest.mock import patch
+        from job_applier.resolution.qwen import QwenMatcher
+
+        with patch.dict(os.environ, {'GROQ_API_KEY': 'fake-key'}):
+            matcher = QwenMatcher()
+
+        questions = [
+            {'id': 'q1', 'text': 'Question 1', 'input_type': 'text', 'options': None},
+            {'id': 'q2', 'text': 'Question 2', 'input_type': 'single_choice', 'options': {}},
+        ]
+        bank = {'facts': {}}
+        with patch.object(matcher.client, 'post') as mock_post:
+            mock_post.return_value.status_code = 400
+            mock_post.return_value.headers = {}
+            # Verify payload generation does not crash with TypeError or KeyError
+            matcher.match(questions, bank)
+            self.assertTrue(mock_post.called)
+            sent_payload = json.loads(mock_post.call_args[1]['json']['messages'][1]['content'])
+            self.assertEqual(len(sent_payload['questions']), 2)
+            self.assertEqual(sent_payload['questions'][0]['options'], [])
+            self.assertEqual(sent_payload['questions'][0]['options_truncated'], False)
+            self.assertEqual(sent_payload['questions'][1]['options'], [])
+            self.assertEqual(sent_payload['questions'][1]['options_truncated'], False)
+
+    def test_cascade_handles_crashing_llm(self):
+        from job_applier.resolution.__main__ import NullSemanticMatcher
+
+        bank = {
+            'facts': {},
+            'questions': [],
+        }
+        q = {
+            'id': 'q-unresolved',
+            'text': 'Unresolved question',
+            'input_type': 'text',
+        }
+
+        class CrashingLLM:
+            model = 'mock-qwen'
+
+            def match(self, unresolved, bank):
+                raise RuntimeError("timeout")
+
+        res = resolve_cascade([q], bank, NullSemanticMatcher(), llm=CrashingLLM())
+        self.assertEqual(len(res['results']), 1)
+        self.assertEqual(res['results'][0]['status'], 'needs_user')
+        self.assertEqual(len(res['calls']), 1)
+        self.assertEqual(res['calls'][0]['status'], 'provider_exception')
+        self.assertEqual(res['calls'][0]['error_type'], 'RuntimeError')
+        self.assertEqual(res['calls'][0]['model'], 'mock-qwen')
+
+    def test_country_matching_strips_parenthesized_dial_code(self):
+        bank = {
+            'facts': {
+                'contact.country': {
+                    'value': 'United States',
+                    'confirmed': True,
+                    'source': 'vault',
+                    'option_labels': ['United States'],
+                }
+            },
+            'questions': [
+                {
+                    'fact': 'contact.country',
+                    'input_types': ['single_choice', 'combobox', 'select'],
+                    'aliases': ['Country'],
+                }
+            ],
+        }
+        q = {
+            'id': 'q-country',
+            'text': 'Country',
+            'input_type': 'single_choice',
+            'options': {
+                'items': [
+                    {'id': 'opt-us', 'label': 'United States (+1)', 'value': 'US'},
+                    {'id': 'opt-ca', 'label': 'Canada (+1)', 'value': 'CA'},
+                ],
+                'complete': True,
+            },
+        }
+        res = render(q, 'contact.country', bank, 'exact', 'test_reason')
+        self.assertEqual(res['status'], 'ready')
+        self.assertIsNotNone(res.get('selected_option'))
+        self.assertEqual(res['selected_option']['label'], 'United States (+1)')
+        self.assertEqual(res['selected_option']['id'], 'opt-us')
 
 
 if __name__ == '__main__':

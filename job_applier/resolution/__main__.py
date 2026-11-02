@@ -7,7 +7,7 @@ import sys
 
 from ..safe_io import write_json_atomic
 from . import SCHEMA_VERSION
-from .engine import pending_questions, resolve_cascade
+from .engine import normalize, pending_questions, resolve_cascade
 
 
 class NullSemanticMatcher:
@@ -126,15 +126,12 @@ DEFAULT_TEMPLATES = [
         'fact': 'work.us_sponsorship_now_or_future',
         'input_types': ['single_choice', 'combobox', 'select', 'radio'],
         'aliases': [
+            'Will you now or in the future require sponsorship for employment visa status?',
             'Will you now or in the future require visa sponsorship?',
-            'Will you require sponsorship?',
             'Will you now or in the future require sponsorship?',
-            'Visa Sponsorship',
             'Do you require immigration sponsorship to work for Affirm in the United States?',
             'Will you require immigration sponsorship at any point in the future to maintain authorization to work in the United States?',
             'Do you require immigration sponsorship to work in the United States?',
-            'Will you require immigration sponsorship at any point in the future?',
-            'Do you require immigration sponsorship?',
         ],
     },
     {
@@ -143,7 +140,6 @@ DEFAULT_TEMPLATES = [
         'aliases': [
             'Have you previously been employed at Affirm for any length of time?',
             'Have you previously been employed at this company for any length of time?',
-            'Have you previously been employed for any length of time?',
             'Have you previously worked for this company?',
             'Prior Employment',
             'Former Employee',
@@ -228,23 +224,53 @@ def _degree_aliases(degree_val):
     return []
 
 
-def _build_bank_from_profile_and_answers(profile, raw_answers):
+def _build_bank_from_profile_and_answers(profile, raw_answers, resume=None):
+    profile = profile or {}
+    raw_answers = raw_answers or []
     name_tokens = (profile.get('name') or '').split()
     first_name = name_tokens[0] if name_tokens else None
     last_name = name_tokens[-1] if len(name_tokens) > 1 else None
     name = ' '.join(name_tokens) if name_tokens else None
 
+    known_employers = []
+    exp_entries = []
+    if isinstance(resume, dict):
+        work = resume.get('work')
+        if isinstance(work, list):
+            exp_entries.extend(work)
+        exp = resume.get('experience')
+        if isinstance(exp, list):
+            exp_entries.extend(exp)
+    if isinstance(profile, dict):
+        work = profile.get('work')
+        if isinstance(work, list):
+            exp_entries.extend(work)
+        exp = profile.get('experience')
+        if isinstance(exp, list):
+            exp_entries.extend(exp)
+    for item in exp_entries:
+        if isinstance(item, dict):
+            emp = (
+                item.get('name')
+                or item.get('company')
+                or item.get('org')
+                or item.get('employer')
+                or item.get('organization')
+            )
+            if emp:
+                norm_emp = normalize(emp)
+                if norm_emp and norm_emp not in known_employers:
+                    known_employers.append(norm_emp)
+
     resume_path = profile.get('resume_path')
     if not (resume_path and os.path.isfile(resume_path)):
         import glob
-        pattern = '/home/yash/.applytwin/resumes/*/*.pdf'
-        candidates = [p for p in glob.glob(pattern) if os.path.isfile(p)]
-        if not candidates:
-            pattern2 = os.path.expanduser('~/.applytwin/resumes/*/*.pdf')
-            candidates = [p for p in glob.glob(pattern2) if os.path.isfile(p)]
-        if not candidates:
-            pattern3 = os.path.expanduser('~/.job-applier/resumes/*/*.pdf')
-            candidates = [p for p in glob.glob(pattern3) if os.path.isfile(p)]
+        candidates = []
+        for p_pattern in (
+            os.path.expanduser('~/.job-applier/resumes/*/*.pdf'),
+            os.path.expanduser('~/.applytwin/resumes/*/*.pdf'),
+        ):
+            candidates.extend([p for p in glob.glob(p_pattern) if os.path.isfile(p)])
         if candidates:
             resume_path = max(candidates, key=os.path.getmtime)
         else:
@@ -325,12 +351,14 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
         'work.prior_employee': {
             'value': 'No',
             'confirmed': True,
-            'source': 'vault',
+            'source': 'resume_absence',
+            'known_employers': known_employers,
             'option_labels': [
                 'No',
                 'I have not previously been employed at Affirm',
                 'I have not previously been employed',
                 'I have not previously been employed at this company',
+                'Never',
             ],
         },
         'meta.hear_about': {
@@ -415,7 +443,7 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
             continue
         fact_key = key_map.get(k, k)
         if fact_key in facts:
-            if facts[fact_key]['value'] is None and val is not None and val != '':
+            if (facts[fact_key]['value'] is None or fact_key == 'work.prior_employee') and val is not None and val != '':
                 if fact_key in (
                     'work.authorized_us',
                     'work.us_sponsorship_now_or_future',
@@ -430,6 +458,21 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
                 facts[fact_key]['source'] = row.get('source') or 'vault'
                 if fact_key == 'education.degree':
                     facts[fact_key]['option_labels'] = _degree_aliases(val)
+                elif fact_key == 'work.prior_employee':
+                    if val in ('Yes', True) or (isinstance(val, str) and val.strip().lower() == 'yes'):
+                        facts[fact_key]['option_labels'] = [
+                            'Yes',
+                            'I have previously been employed',
+                            'I have previously worked for this company',
+                        ]
+                    elif val in ('No', False) or (isinstance(val, str) and val.strip().lower() == 'no'):
+                        facts[fact_key]['option_labels'] = [
+                            'No',
+                            'I have not previously been employed at Affirm',
+                            'I have not previously been employed',
+                            'I have not previously been employed at this company',
+                            'Never',
+                        ]
         else:
             if val is not None and val != '':
                 facts[fact_key] = {
@@ -455,10 +498,14 @@ def _build_default_bank():
     except Exception:
         profile = {}
     try:
+        resume = store.resume()
+    except Exception:
+        resume = {}
+    try:
         raw_answers = store.answers()
     except Exception:
         raw_answers = ans.default_bank(profile)
-    return _build_bank_from_profile_and_answers(profile, raw_answers)
+    return _build_bank_from_profile_and_answers(profile, raw_answers, resume=resume)
 
 
 def load_bank(bank_path=None):
@@ -554,9 +601,9 @@ def main(argv=None):
         'scope': args.scope,
         'summary': {
             'total': len(questions),
-            'ready': sum(1 for r in results if r['status'] == 'ready'),
-            'review': sum(1 for r in results if r['status'] == 'review'),
-            'needs_user': sum(1 for r in results if r['status'] == 'needs_user'),
+            'ready': sum(1 for r in results if r.get('status') == 'ready'),
+            'review': sum(1 for r in results if r.get('status') == 'review'),
+            'needs_user': sum(1 for r in results if r.get('status') == 'needs_user'),
         },
         'answers': results,
         'pending': pending,

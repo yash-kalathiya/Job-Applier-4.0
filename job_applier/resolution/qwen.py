@@ -14,6 +14,18 @@ Every question must appear exactly once. Return null whenever unsupported or amb
 No free text answers. No reasoning prose.'''
 
 
+def _format_q(q):
+    items = (q.get('options') or {}).get('items') or []
+    return {
+        'id': (q.get('id') or q.get('question_id')),
+        'text': q.get('text', ''),
+        'type': q.get('input_type', ''),
+        'section': q.get('section', ''),
+        'options': [o.get('label') or '' for o in items if isinstance(o, dict)][:12],
+        'options_truncated': len(items) > 12,
+    }
+
+
 class QwenMatcher:
     def __init__(self, env_file=None, key_name='GROQ_API_KEY', batch_size=5):
         import httpx
@@ -32,18 +44,19 @@ class QwenMatcher:
 
     def match(self, questions, bank):
         predictions, calls = {}, []
-        facts = {k: {'value': f['value'], 'scope': f.get('scope', ''),
-                     'option_labels': f.get('option_labels', [])}
-                 for k, f in bank['facts'].items() if f.get('confirmed') and f.get('value') is not None}
+        raw_facts = bank.get('facts') if isinstance(bank, dict) else {}
+        facts = {
+            k: {'value': f['value'], 'scope': f.get('scope', ''),
+                'option_labels': f.get('option_labels', [])}
+            for k, f in (raw_facts or {}).items()
+            if isinstance(f, dict) and f.get('confirmed') and f.get('value') is not None
+        }
         for offset in range(0, len(questions), self.batch_size):
             batch = questions[offset:offset+self.batch_size]
             # Only labels and compact context, never DOM, full AX, history, or evaluator labels.
-            payload = {'facts': facts, 'questions': [{'id': q['id'], 'text': q['text'],
-                        'type': q['input_type'], 'section': q.get('section', ''),
-                        'options': [o['label'] for o in q['options']['items']][:12],
-                        'options_truncated': len(q['options']['items']) > 12} for q in batch]}
+            payload = {'facts': facts, 'questions': [_format_q(q) for q in batch]}
             start = time.perf_counter()
-            call = {'model': MODEL, 'question_ids': [q['id'] for q in batch], 'usage': None}
+            call = {'model': MODEL, 'question_ids': [(q.get('id') or q.get('question_id')) for q in batch], 'usage': None}
             try:
                 response = self.client.post('chat/completions', json={'model': MODEL,
                     'messages': [{'role': 'system', 'content': SYSTEM},
@@ -68,7 +81,7 @@ class QwenMatcher:
                     raise ValueError('Incomplete model response')
                 matches = json.loads(choice['message']['content'])['matches']
                 ids = [m['id'] for m in matches]
-                if len(ids) != len(set(ids)) or set(ids) != {q['id'] for q in batch}:
+                if len(ids) != len(set(ids)) or set(ids) != {(q.get('id') or q.get('question_id')) for q in batch}:
                     raise ValueError('Mismatched response IDs')
                 for item in matches:
                     key = item.get('fact_key')
