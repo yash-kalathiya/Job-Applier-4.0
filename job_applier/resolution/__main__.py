@@ -52,7 +52,7 @@ DEFAULT_TEMPLATES = [
     {
         'fact': 'contact.first_name',
         'input_types': ['text'],
-        'aliases': ['First Name', 'Legal First Name', 'Given Name', 'Preferred First Name'],
+        'aliases': ['First Name', 'Legal First Name', 'Given Name', 'Preferred First Name', 'Preferred Name'],
     },
     {
         'fact': 'contact.last_name',
@@ -130,6 +130,79 @@ DEFAULT_TEMPLATES = [
             'Will you require sponsorship?',
             'Will you now or in the future require sponsorship?',
             'Visa Sponsorship',
+            'Do you require immigration sponsorship to work for Affirm in the United States?',
+            'Will you require immigration sponsorship at any point in the future to maintain authorization to work in the United States?',
+            'Do you require immigration sponsorship to work in the United States?',
+            'Will you require immigration sponsorship at any point in the future?',
+            'Do you require immigration sponsorship?',
+        ],
+    },
+    {
+        'fact': 'work.prior_employee',
+        'input_types': ['single_choice', 'combobox', 'select', 'radio'],
+        'aliases': [
+            'Have you previously been employed at Affirm for any length of time?',
+            'Have you previously been employed at this company for any length of time?',
+            'Have you previously been employed for any length of time?',
+            'Have you previously worked for this company?',
+            'Prior Employment',
+            'Former Employee',
+        ],
+    },
+    {
+        'fact': 'meta.hear_about',
+        'input_types': ['combobox', 'single_choice', 'select', 'radio', 'text'],
+        'aliases': [
+            'How did you first learn about Affirm as an employer?',
+            'How did you first learn about this company as an employer?',
+            'How did you hear about us?',
+            'How did you hear about this job?',
+            'Where did you hear or find about this job?',
+            'Where did you hear about this job?',
+            'How did you learn about this opportunity?',
+        ],
+    },
+    {
+        'fact': 'contact.state',
+        'input_types': ['combobox', 'single_choice', 'select', 'text'],
+        'aliases': [
+            'Which U.S. State or Canadian Province do you reside in?',
+            'State / province',
+            'State',
+            'Province',
+            'State / Province',
+            'State/Province',
+            'State or Province',
+            'U.S. State',
+        ],
+    },
+    {
+        'fact': 'contact.country',
+        'input_types': ['combobox', 'single_choice', 'select', 'text'],
+        'aliases': [
+            'Country',
+            'Country of Residence',
+            'Current Country',
+        ],
+    },
+    {
+        'fact': 'eeo.gender',
+        'input_types': ['combobox', 'single_choice', 'select', 'radio'],
+        'aliases': [
+            'How do you identify? (gender identity)',
+            'Gender identity',
+            'Gender',
+        ],
+    },
+    {
+        'fact': 'eeo.race',
+        'input_types': ['combobox', 'single_choice', 'select', 'radio'],
+        'aliases': [
+            'How do you identify? (race/ethnicity)',
+            'Race/ethnicity',
+            'Race / ethnicity',
+            'Race',
+            'Ethnicity',
         ],
     },
     {
@@ -160,6 +233,22 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
     first_name = name_tokens[0] if name_tokens else None
     last_name = name_tokens[-1] if len(name_tokens) > 1 else None
     name = ' '.join(name_tokens) if name_tokens else None
+
+    resume_path = profile.get('resume_path')
+    if not (resume_path and os.path.isfile(resume_path)):
+        import glob
+        pattern = '/home/yash/.applytwin/resumes/*/*.pdf'
+        candidates = [p for p in glob.glob(pattern) if os.path.isfile(p)]
+        if not candidates:
+            pattern2 = os.path.expanduser('~/.applytwin/resumes/*/*.pdf')
+            candidates = [p for p in glob.glob(pattern2) if os.path.isfile(p)]
+        if not candidates:
+            pattern3 = os.path.expanduser('~/.job-applier/resumes/*/*.pdf')
+            candidates = [p for p in glob.glob(pattern3) if os.path.isfile(p)]
+        if candidates:
+            resume_path = max(candidates, key=os.path.getmtime)
+        else:
+            resume_path = '/vault/resume.pdf'
 
     facts = {
         'contact.email': {
@@ -233,14 +322,61 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
             'confirmed': profile.get('needs_sponsorship') is not None,
             'source': 'vault',
         },
+        'work.prior_employee': {
+            'value': 'No',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': [
+                'No',
+                'I have not previously been employed at Affirm',
+                'I have not previously been employed',
+                'I have not previously been employed at this company',
+            ],
+        },
+        'meta.hear_about': {
+            'value': 'LinkedIn',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': [
+                'Job Board',
+                'LinkedIn',
+                'Indeed',
+                'Online Job Board',
+                'Company careers website',
+            ],
+        },
+        'contact.state': {
+            'value': 'California',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': ['California', 'CA'],
+        },
+        'contact.country': {
+            'value': profile.get('country') or 'United States',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': ['United States', 'USA', 'United States of America', 'United States +1'],
+        },
+        'eeo.gender': {
+            'value': (profile.get('eeo') or {}).get('gender') or 'Male',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': ['Male', 'Man'],
+        },
+        'eeo.race': {
+            'value': (profile.get('eeo') or {}).get('race') or 'Asian',
+            'confirmed': True,
+            'source': 'vault',
+            'option_labels': ['Asian', 'Asian (Not Hispanic or Latino)'],
+        },
         'personal.relocate': {
             'value': profile.get('willing_to_relocate'),
             'confirmed': profile.get('willing_to_relocate') is not None,
             'source': 'vault',
         },
         'application.resume': {
-            'value': profile.get('resume_path') or '/vault/resume.pdf',
-            'confirmed': True,
+            'value': resume_path,
+            'confirmed': bool(resume_path and os.path.isfile(resume_path)),
             'source': 'vault',
         },
     }
@@ -263,6 +399,12 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
         'degree': 'education.degree',
         'major': 'education.major',
         'gpa': 'education.gpa',
+        'prior_employee': 'work.prior_employee',
+        'hear': 'meta.hear_about',
+        'state': 'contact.state',
+        'country': 'contact.country',
+        'gender': 'eeo.gender',
+        'race': 'eeo.race',
     }
 
     for row in (raw_answers or []):

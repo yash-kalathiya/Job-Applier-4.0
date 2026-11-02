@@ -60,6 +60,29 @@ def exact_match(question, bank):
                 'work.us_sponsorship_now_or_future',
                 'reviewed_keyword_rule:us_sponsorship_now_or_future',
             )
+        if (('require sponsorship' in text or 'require immigration sponsorship' in text)
+                and 'united states' in text
+                and not tokens.intersection(negative_tokens)
+                and not any(x in text for x in non_us_locations)):
+            return (
+                'work.us_sponsorship_now_or_future',
+                'reviewed_keyword_rule:us_sponsorship_now_or_future',
+            )
+        if ('previously' in tokens or 'ever' in tokens) and ('employed' in tokens or 'worked' in tokens) and not any(x in tokens for x in ('government', 'federal', 'public')):
+            return (
+                'work.prior_employee',
+                'reviewed_keyword_rule:prior_employee',
+            )
+        if ('how did you' in text or 'where did you' in text) and ('hear' in tokens or 'learn' in tokens or 'find' in tokens):
+            return (
+                'meta.hear_about',
+                'reviewed_keyword_rule:meta_hear_about',
+            )
+        if 'state' in tokens and ('province' in tokens or 'reside' in tokens):
+            return (
+                'contact.state',
+                'reviewed_keyword_rule:contact_state',
+            )
     return None, 'no_exact_match'
 
 
@@ -118,6 +141,28 @@ def render(question, fact_key, bank, tier, reason, **extra):
         items = (question.get('options') or {}).get('items') or []
         matches = [o for o in items if not o.get('disabled')
                    and normalize(o.get('label') or '') in {normalize(v) for v in aliases}]
+        if fact_key == 'contact.country' and not matches:
+            country_norm_aliases = {normalize(v) for v in aliases}
+            matches = [
+                o for o in items if not o.get('disabled')
+                and normalize(re.sub(r'\s*\+\d+$', '', o.get('label') or '')) in country_norm_aliases
+            ]
+        if fact_key == 'work.prior_employee' and value in ('No', False) and len(matches) != 1:
+            neg_opts = [
+                o for o in items if not o.get('disabled')
+                and 'not' in normalize(o.get('label') or '').split()
+                and ('employed' in normalize(o.get('label') or '').split() or 'worked' in normalize(o.get('label') or '').split())
+            ]
+            if len(neg_opts) == 1:
+                matches = neg_opts
+        if fact_key == 'meta.hear_about' and len(matches) > 1:
+            pref_order = ['Job Board', 'LinkedIn', 'Indeed', 'Online Job Board', 'Company careers website', *aliases]
+            for cand in pref_order:
+                cand_norm = normalize(cand)
+                c_matches = [o for o in matches if normalize(o.get('label') or '') == cand_norm]
+                if len(c_matches) == 1:
+                    matches = c_matches
+                    break
         if len(matches) != 1:
             return abstain(question, tier, 'option_not_uniquely_observed', **extra)
         selected = {k: matches[0].get(k) for k in ('id', 'label', 'value')}

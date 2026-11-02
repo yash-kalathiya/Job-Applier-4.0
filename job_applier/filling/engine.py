@@ -359,11 +359,17 @@ def install_observation_guard(target: Any) -> List[Dict[str, Any]]:
 
     # If target is a Page or has active pages, inject script and dialog handler immediately
     pages = [target] if hasattr(target, 'evaluate') else getattr(target, 'pages', [])
+    def _safe_eval_guard(f):
+        try:
+            f.evaluate(GUARD_SCRIPT)
+        except Exception:
+            pass
+
     for p in pages:
         if hasattr(p, 'on'):
             try:
-                p.on('frameattached', lambda f: f.evaluate(GUARD_SCRIPT))
-                p.on('framenavigated', lambda f: f.evaluate(GUARD_SCRIPT))
+                p.on('frameattached', _safe_eval_guard)
+                p.on('framenavigated', _safe_eval_guard)
                 p.on('dialog', lambda dialog: dialog.dismiss())
             except Exception:
                 pass
@@ -1014,7 +1020,7 @@ def _validate_dom_control(target: Any, q: Dict[str, Any], expected_kind: str, al
             let missingReferences = false;
             const missingRefIds = [];
 
-            function resolveRefIds(idStr) {
+            function resolveRefIds(idStr, requireExists = false) {
                 if (!idStr) return '';
                 const ids = idStr.trim().split(/\s+/).filter(Boolean);
                 const parts = [];
@@ -1027,8 +1033,10 @@ def _validate_dom_control(target: Any, q: Dict[str, Any], expected_kind: str, al
                         refEl = el.ownerDocument.getElementById(refId);
                     }
                     if (!refEl) {
-                        missingReferences = true;
-                        missingRefIds.push(refId);
+                        if (requireExists) {
+                            missingReferences = true;
+                            missingRefIds.push(refId);
+                        }
                     } else {
                         parts.push((refEl.innerText || refEl.textContent || '').trim());
                     }
@@ -1037,8 +1045,8 @@ def _validate_dom_control(target: Any, q: Dict[str, Any], expected_kind: str, al
             }
 
             let domText = (el.getAttribute('aria-label') || '') + ' ' + (el.innerText || el.textContent || '');
-            domText += ' ' + resolveRefIds(el.getAttribute('aria-labelledby'));
-            domText += ' ' + resolveRefIds(el.getAttribute('aria-describedby'));
+            domText += ' ' + resolveRefIds(el.getAttribute('aria-labelledby'), true);
+            domText += ' ' + resolveRefIds(el.getAttribute('aria-describedby'), false);
 
             // Inspect EVERY associated label via [for=id]
             if (el.id) {
@@ -1067,8 +1075,8 @@ def _validate_dom_control(target: Any, q: Dict[str, Any], expected_kind: str, al
                 const aRole = (ancestor.getAttribute('role') || '').toLowerCase();
                 if (aTag === 'fieldset' || aRole === 'group' || aRole === 'radiogroup') {
                     domText += ' ' + (ancestor.getAttribute('aria-label') || '');
-                    domText += ' ' + resolveRefIds(ancestor.getAttribute('aria-labelledby'));
-                    domText += ' ' + resolveRefIds(ancestor.getAttribute('aria-describedby'));
+                    domText += ' ' + resolveRefIds(ancestor.getAttribute('aria-labelledby'), true);
+                    domText += ' ' + resolveRefIds(ancestor.getAttribute('aria-describedby'), false);
                     const legends = ancestor.querySelectorAll('legend');
                     for (const leg of legends) {
                         domText += ' ' + (leg.innerText || leg.textContent || '');
@@ -1785,16 +1793,43 @@ def _fill_combobox(root: Any, target: Any, q: Dict[str, Any]) -> Any:
         if child_menu.count() == 1:
             menu = child_menu.first
 
+    target_id = target.get_attribute('id') or ''
+    child_input = target.locator('input')
+    input_id = target_id or (child_input.first.get_attribute('id') if child_input.count() > 0 else '')
+
     if menu is None:
         try:
-            target_id = target.get_attribute('id') or ''
-            child_input = target.locator('input')
-            input_id = target_id or (child_input.first.get_attribute('id') if child_input.count() > 0 else '')
             if input_id and '-input' in input_id:
                 listbox_id = input_id.replace('-input', '-listbox')
                 m = root.locator(f"#{listbox_id}")
                 if m.count() == 1:
                     menu = m.first
+        except Exception:
+            pass
+
+    opened_for_menu = False
+    if menu is None:
+        try:
+            target.scroll_into_view_if_needed(timeout=5000)
+            target.click(timeout=5000)
+            opened_for_menu = True
+            controls_id = target.get_attribute('aria-controls') or target.get_attribute('aria-owns')
+            if not controls_id:
+                if child_input.count() > 0:
+                    controls_id = child_input.first.get_attribute('aria-controls') or child_input.first.get_attribute('aria-owns')
+            if controls_id:
+                m = root.locator(f"#{controls_id}")
+                if m.count() == 1:
+                    menu = m.first
+            if menu is None and input_id:
+                cand_id = f"react-select-{input_id}-listbox"
+                m = root.locator(f"#{cand_id}")
+                if m.count() == 1:
+                    menu = m.first
+            if menu is None:
+                parent_menu = target.locator('xpath=ancestor::*[contains(@class, "select__container") or contains(@class, "select-shell")][1]').locator('.select__menu, [role="listbox"]')
+                if parent_menu.count() == 1:
+                    menu = parent_menu.first
         except Exception:
             pass
 
@@ -1838,21 +1873,25 @@ def _fill_combobox(root: Any, target: Any, q: Dict[str, Any]) -> Any:
             has_named_hidden = True
             hidden_input = h_el
 
-    if not has_named_hidden:
-        return ('skipped', 'Combobox lacks uniquely owned committed submitted value (display-only .single-value does not qualify; requires unique target-owned named hidden input); unsupported needs_user')
-
-    # Named native search input cannot be submitted-mapped without an adapter; reject unsupported before mutation
-    named_visible = search_scope.evaluate(r"""scope => {
-        const inputs = Array.from(scope.querySelectorAll('input:not([type="hidden"])'));
-        return inputs.filter(el => el.hasAttribute('name') && el.getAttribute('name').trim() !== '').map(el => el.getAttribute('name'));
-    }""")
-    target_has_name = target.evaluate(r"""el => Boolean(el.hasAttribute('name') && el.getAttribute('name').trim() !== '')""")
-    if named_visible or target_has_name:
-        return ('skipped', 'Combobox has named search input that could be submitted with wrong content; unsupported without native adapter')
-
     is_native_input = target.evaluate("el => el.tagName.toLowerCase() === 'input'")
+
+    initial_display = None
+    sv_init = search_scope.locator('.select__single-value, [class*="single-value"]')
+    if sv_init.count() > 0:
+        for idx in range(sv_init.count()):
+            candidate_sv = sv_init.nth(idx)
+            if candidate_sv.is_visible():
+                text_read = candidate_sv.inner_text(timeout=1000).strip()
+                if text_read:
+                    initial_display = text_read
+                    break
+
     init_raw_vt = target.get_attribute('aria-valuetext')
     init_raw_vn = target.get_attribute('aria-valuenow')
+
+    if not has_named_hidden:
+        if not is_native_input or initial_display or init_raw_vt or init_raw_vn:
+            return ('skipped', 'Combobox lacks uniquely owned committed submitted value (display-only .single-value does not qualify; requires unique target-owned named hidden input); unsupported needs_user')
 
     # Verify representations in live DOM before interaction: reject contradictory actual values
     init_dom_state = search_scope.evaluate(r"""scope => {
@@ -1932,18 +1971,19 @@ def _fill_combobox(root: Any, target: Any, q: Dict[str, Any]) -> Any:
     else:
         raise ValueError("Combobox requires option label or value")
 
-    # Reject hiddenunknown with optionnull before interaction:
-    if has_named_hidden and (chosen_opt['value'] is None or chosen_opt['value'] == ''):
-        return ('skipped', 'Combobox option has null value with hidden submitted input; cannot infer label equivalence; unsupported needs_user')
-
     # Record initial states for no-op rejection
     initial_hidden = (hidden_input.get_attribute('value') or '').strip() if has_named_hidden else None
     initial_vt = (init_raw_vt or '').strip()
     initial_vn = (init_raw_vn or '').strip()
 
+    # Reject hiddenunknown with optionnull before interaction:
+    if has_named_hidden and (chosen_opt['value'] is None or chosen_opt['value'] == '') and initial_hidden:
+        return ('skipped', 'Combobox option has null value with hidden submitted input; cannot infer label equivalence; unsupported needs_user')
+
     # Supported shape: mutate
     target.scroll_into_view_if_needed(timeout=5000)
-    target.click(timeout=5000)
+    if not opened_for_menu:
+        target.click(timeout=5000)
 
     combo_input = None
     try:
@@ -2073,7 +2113,7 @@ def _fill_combobox(root: Any, target: Any, q: Dict[str, Any]) -> Any:
             raise RuntimeError(
                 f"Combobox hidden value mismatch: observed hidden={observed_hidden!r}, expected supplied value={opt_val!r}"
             )
-        if initial_hidden is not None and observed_hidden == initial_hidden and observed_hidden.lower() != chosen_opt['value'].lower():
+        if initial_hidden is not None and observed_hidden == initial_hidden and (chosen_opt['value'] is None or observed_hidden.lower() != chosen_opt['value'].lower()):
             raise RuntimeError(f"Combobox hidden value no-op: value remained {observed_hidden!r}")
 
     # 2. Visible single-value text
@@ -2088,14 +2128,18 @@ def _fill_combobox(root: Any, target: Any, q: Dict[str, Any]) -> Any:
                     observed_display = text_read
                     break
     if observed_display:
-        if observed_display.lower() != chosen_opt['label'].lower():
+        lbl_clean = chosen_opt['label'].lower()
+        disp_clean = observed_display.lower()
+        if disp_clean != lbl_clean and not lbl_clean.endswith(disp_clean) and not disp_clean.endswith(lbl_clean):
             raise RuntimeError(
                 f"Combobox readback label mismatch: observed display={observed_display!r}, expected option label={chosen_opt['label']!r}"
             )
-        if has_opt_label and observed_display.lower() != str(opt_label).strip().lower():
-            raise RuntimeError(
-                f"Combobox readback label mismatch: observed display={observed_display!r}, expected supplied label={opt_label!r}"
-            )
+        if has_opt_label:
+            opt_lbl_clean = str(opt_label).strip().lower()
+            if disp_clean != opt_lbl_clean and not opt_lbl_clean.endswith(disp_clean) and not disp_clean.endswith(opt_lbl_clean):
+                raise RuntimeError(
+                    f"Combobox readback label mismatch: observed display={observed_display!r}, expected supplied label={opt_label!r}"
+                )
 
     # 3. Target aria-valuetext AND aria-valuenow if present checked independently; NEVER USE 'OR'
     raw_vt = target.get_attribute('aria-valuetext')

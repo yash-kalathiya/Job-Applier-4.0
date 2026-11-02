@@ -6,6 +6,7 @@
   job-applier extract URL --out DIRECTORY   inspect questions with DOM + accessibility (Phase 1)
   job-applier resolve QUESTIONS.json --out ANSWERS.json   match questions to facts (Phase 2)
   job-applier fill URL --answers ANSWERS.json --out DIR   fill application form (Phase 3)
+  job-applier validate-pipeline URL --out DIR   validate fetch -> answer -> fill pipeline end-to-end
   job-applier tailor JOB_ID [--template classic] [--plan plan.json]
   job-applier render [--template classic]       master resume PDF
   job-applier ats [JOB_ID]        ATS report for the vault (vs a job)
@@ -58,6 +59,9 @@ def main():
     elif cmd == 'fill':
         from .filling.__main__ import main as fill
         sys.exit(fill(sys.argv[2:]))
+    elif cmd == 'validate-pipeline':
+        from .validate_pipeline import main as validate_pipeline
+        sys.exit(validate_pipeline(sys.argv[2:]))
     elif cmd == 'mcp':
         from .mcp import main as m
         m()
