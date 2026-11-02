@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 
+from ..safe_io import write_json_atomic
 from . import SCHEMA_VERSION
 from .engine import pending_questions, resolve_cascade
 
@@ -144,6 +145,16 @@ DEFAULT_TEMPLATES = [
 ]
 
 
+def _degree_aliases(degree_val):
+    """Return proven equivalent aliases only for confirmed actual degree value.
+
+    Automatic cross-qualification aliases (e.g. mapping Bachelor to BS/BA, BS to BA,
+    or MS to MA) are removed. Safest behavior is empty option_labels so that only
+    exact normalized matches against the actual fact value succeed.
+    """
+    return []
+
+
 def _build_bank_from_profile_and_answers(profile, raw_answers):
     name_tokens = (profile.get('name') or '').split()
     first_name = name_tokens[0] if name_tokens else None
@@ -200,17 +211,7 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
             'value': profile.get('degree') or None,
             'confirmed': bool(profile.get('degree')),
             'source': 'vault',
-            'option_labels': [
-                "Bachelor's Degree",
-                "Bachelor of Science",
-                "Bachelor of Arts",
-                "Master's Degree",
-                "Master of Science",
-                "PhD",
-                "Doctorate",
-                "Associate's Degree",
-                "High School",
-            ],
+            'option_labels': _degree_aliases(profile.get('degree')),
         },
         'education.major': {
             'value': profile.get('major') or None,
@@ -285,6 +286,8 @@ def _build_bank_from_profile_and_answers(profile, raw_answers):
                 facts[fact_key]['value'] = val
                 facts[fact_key]['confirmed'] = True
                 facts[fact_key]['source'] = row.get('source') or 'vault'
+                if fact_key == 'education.degree':
+                    facts[fact_key]['option_labels'] = _degree_aliases(val)
         else:
             if val is not None and val != '':
                 facts[fact_key] = {
@@ -363,6 +366,12 @@ def main(argv=None):
         default='json',
         help='Format (json or summary, default json)',
     )
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        default=False,
+        help='Allow overwriting existing output file',
+    )
 
     args = parser.parse_args(argv)
 
@@ -413,25 +422,17 @@ def main(argv=None):
         'elapsed_ms': cascade.get('elapsed_ms', 0),
     }
 
-    out_path = Path(args.out).expanduser().resolve()
-    if out_path.is_dir() or str(args.out).endswith(('/', '\\')):
-        out_file = out_path / 'answers.json'
-    elif out_path.suffix.lower() == '.json':
-        out_file = out_path
+    out_lexical = os.path.abspath(os.path.expanduser(args.out))
+    if str(args.out).endswith(('/', '\\')) or os.path.isdir(out_lexical):
+        out_file = Path(out_lexical) / 'answers.json'
+    elif Path(out_lexical).suffix.lower() == '.json':
+        out_file = Path(out_lexical)
     else:
-        out_file = out_path / 'answers.json'
+        out_file = Path(out_lexical) / 'answers.json'
 
     try:
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-        out_file.write_text(
-            json.dumps(output, indent=2, ensure_ascii=False) + '\n',
-            encoding='utf-8',
-        )
-        try:
-            out_file.chmod(0o600)
-        except OSError:
-            pass
-    except OSError as err:
+        write_json_atomic(out_file, output, overwrite=args.overwrite)
+    except (OSError, ValueError) as err:
         parser.error(f'Failed to write output: {err}')
 
     if args.format == 'json':

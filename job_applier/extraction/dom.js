@@ -31,7 +31,8 @@
   const group = element.closest('fieldset, [role="radiogroup"], [role="group"]');
   const groupLabel = group ? clean(group.querySelector('legend')?.textContent || group.getAttribute('aria-label') ||
     (group.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => root.getElementById?.(id)?.textContent || '').join(' ')) : '';
-  const form = element.closest('form');
+  const isNative = 'form' in element || ['input', 'select', 'textarea', 'button', 'fieldset'].includes(tag);
+  const form = isNative ? element.form : element.closest('form');
   const section = element.closest('section, fieldset, [role="group"], [role="radiogroup"]');
   const sectionLabel = clean(section?.querySelector('legend,h1,h2,h3,h4')?.textContent) || groupLabel;
   const label = clean(labels.join(' ')) || referenced('aria-labelledby') || attr('aria-label') || nearbyLabel || '';
@@ -53,7 +54,7 @@
     group: group ? {path: path(group), label: groupLabel, role: group.getAttribute('role'),
       actions:[...group.querySelectorAll('button')].map(e=>clean(e.textContent)).filter(Boolean),
       help:[...group.querySelectorAll('p')].map(e=>clean(e.textContent)).join(' ')} : null,
-    form_path: path(form), section: sectionLabel, wrapper_path: path(wrapper),
+    form_path: form ? path(form) : '', form_id: form ? (form.id || null) : null, has_form: Boolean(form), section: sectionLabel, wrapper_path: path(wrapper),
     parent_combobox_path: path(parentCombo),
     visible: visible(element), file_trigger_visible: type === 'file' &&
       ([...(element.labels || [])].some(visible) || visible(wrapper) ||

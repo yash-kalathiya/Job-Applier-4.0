@@ -518,6 +518,49 @@ class TestResolutionCLIFunctional(unittest.TestCase):
             ])
         self.assertEqual(cm.exception.code, 2)
 
+    def test_resolution_cli_refuses_symlink_final_intermediate_and_dangling(self):
+        real_target = self.dir / 'real_target.json'
+        real_target.write_text('{}', encoding='utf-8')
+
+        # 1. Final path is a symlink
+        sym_file = self.dir / 'sym_answers.json'
+        sym_file.symlink_to(real_target)
+        with contextlib.redirect_stderr(io.StringIO()) as stderr_buf, self.assertRaises(SystemExit) as cm:
+            main([
+                str(self.questions_file),
+                '--bank', str(self.bank_file),
+                '--out', str(sym_file),
+            ])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("symlink", stderr_buf.getvalue().lower())
+
+        # 2. Intermediate directory component is a symlink
+        real_dir = self.dir / 'real_dir'
+        real_dir.mkdir(parents=True, exist_ok=True)
+        sym_dir = self.dir / 'sym_dir'
+        sym_dir.symlink_to(real_dir)
+        sym_dir_out = sym_dir / 'answers.json'
+        with contextlib.redirect_stderr(io.StringIO()) as stderr_buf, self.assertRaises(SystemExit) as cm:
+            main([
+                str(self.questions_file),
+                '--bank', str(self.bank_file),
+                '--out', str(sym_dir_out),
+            ])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("symlink", stderr_buf.getvalue().lower())
+
+        # 3. Dangling symlink
+        dangling_sym = self.dir / 'dangling_answers.json'
+        dangling_sym.symlink_to(self.dir / 'nonexistent_target_xyz.json')
+        with contextlib.redirect_stderr(io.StringIO()) as stderr_buf, self.assertRaises(SystemExit) as cm:
+            main([
+                str(self.questions_file),
+                '--bank', str(self.bank_file),
+                '--out', str(dangling_sym),
+            ])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("symlink", stderr_buf.getvalue().lower())
+
 
 class TestResolutionSubprocessExecution(unittest.TestCase):
     def setUp(self):
@@ -588,6 +631,7 @@ class TestResolutionSubprocessExecution(unittest.TestCase):
             text=True,
             check=False,
             env=self.subproc_env,
+            timeout=30,
         )
         self.assertEqual(proc.returncode, 0, f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
         self.assertTrue(out_file.exists())
@@ -611,6 +655,7 @@ class TestResolutionSubprocessExecution(unittest.TestCase):
             text=True,
             check=False,
             env=self.subproc_env,
+            timeout=30,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn('Phase 2', proc.stdout)
@@ -630,6 +675,7 @@ class TestResolutionSubprocessExecution(unittest.TestCase):
             text=True,
             check=False,
             env=self.subproc_env,
+            timeout=30,
         )
         self.assertIn('job-applier resolve QUESTIONS.json --out ANSWERS.json', proc.stdout)
 

@@ -21,7 +21,12 @@ def normalize(text):
 
 
 def eligible(question, entry):
-    if question['input_type'] not in entry['input_types']:
+    q_types = {question.get('input_type'), question.get('native_input_type')} - {None}
+    if 'textbox' in q_types:
+        q_types.add('text')
+    if 'text' in q_types:
+        q_types.add('textbox')
+    if not q_types.intersection(entry.get('input_types') or []):
         return False
     section = normalize(question.get('section') or '')
     required_section = entry.get('section_contains')
@@ -58,10 +63,32 @@ def exact_match(question, bank):
     return None, 'no_exact_match'
 
 
+def _copy_question_metadata(question):
+    keys = (
+        'input_type',
+        'native_input_type',
+        'ax_role',
+        'frame_id',
+        'frame_descriptor',
+        'locator_candidates',
+        'locator_scope',
+        'control_ids',
+        'control_metadata',
+        'options',
+        'section',
+        'warnings',
+        'required',
+        'help',
+    )
+    return {k: question[k] for k in keys if k in question}
+
+
 def abstain(question, tier, reason, **extra):
-    return {'question_id': question['id'], 'text': question['text'], 'tier': tier,
+    meta = _copy_question_metadata(question)
+    return {'question_id': question.get('id') or question.get('question_id'),
+            'text': question.get('text', ''), 'tier': tier,
             'status': 'needs_user', 'fact_key': None, 'answer': None,
-            'reason': reason, **extra}
+            'reason': reason, **meta, **extra}
 
 
 def render(question, fact_key, bank, tier, reason, **extra):
@@ -99,9 +126,12 @@ def render(question, fact_key, bank, tier, reason, **extra):
         return abstain(question, tier, 'unsupported_value_shape', **extra)
     # New semantic/model aliases are proposals. Promote only after user review.
     status = 'ready' if tier == 'exact' else 'review'
-    return {'question_id': question['id'], 'text': question['text'], 'tier': tier,
+    meta = _copy_question_metadata(question)
+    return {'question_id': question.get('id') or question.get('question_id'),
+            'text': question.get('text', ''), 'tier': tier,
             'status': status, 'fact_key': fact_key, 'answer': value,
-            'selected_option': selected, 'source': fact['source'], 'reason': reason, **extra}
+            'selected_option': selected, 'source': fact['source'], 'reason': reason,
+            **meta, **extra}
 
 
 def resolve_exact(question, bank):

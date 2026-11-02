@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pipeline Test Synthetic Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    form { border: 1px solid #ccc; padding: 16px; margin-bottom: 20px; border-radius: 4px; }
+    .field { margin-bottom: 12px; }
+    label { display: block; font-weight: bold; margin-bottom: 4px; }
+    input[type=text], input[type=email], input[type=tel], select { width: 100%; max-width: 400px; padding: 6px; }
+    iframe { width: 100%; max-width: 450px; height: 120px; border: 1px dashed #aaa; }
+  </style>
+</head>
+<body>
+  <h1>Job Application Synthetic Pipeline Fixture</h1>
+
+  <!-- Primary Application Form -->
+  <form id="app-form" action="/submit-app" method="POST">
+    <h2>Main Job Application Form</h2>
+    <div class="field">
+      <label for="fn1">First Name <span class="req">*</span></label>
+      <input type="text" id="fn1" name="first_name" required>
+    </div>
+
+    <div class="field">
+      <label for="email1">Email Address <span class="req">*</span></label>
+      <input type="email" id="email1" name="email" required>
+    </div>
+
+    <div class="field">
+      <label for="phone1">Phone Number</label>
+      <input type="tel" id="phone1" name="phone">
+    </div>
+
+    <div class="field">
+      <label for="work_auth_sel">Authorized to work in the United States <span class="req">*</span></label>
+      <select id="work_auth_sel" name="work_auth" required>
+        <option value="">-- Please select --</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+    </div>
+
+    <fieldset class="field" id="sponsor_group">
+      <legend>Will you require sponsorship?</legend>
+      <label for="sponsor_yes"><input type="radio" id="sponsor_yes" name="sponsor" value="true"> Yes</label>
+      <label for="sponsor_no"><input type="radio" id="sponsor_no" name="sponsor" value="false"> No</label>
+    </fieldset>
+
+    <button type="submit" id="submit_main">Submit Application</button>
+  </form>
+
+  <!-- External element linked to app-form via form="app-form" -->
+  <div class="field" id="external-field">
+    <label for="portfolio_ext">Portfolio Website</label>
+    <input type="text" id="portfolio_ext" form="app-form" name="portfolio" placeholder="https://example.com/portfolio">
+  </div>
+
+  <!-- Secondary Newsletter Form with duplicate labels -->
+  <form id="newsletter-form" action="/subscribe" method="POST">
+    <h2>Newsletter Signup (Duplicate Labels)</h2>
+    <div class="field">
+      <label for="fn2">First Name</label>
+      <input type="text" id="fn2" name="first_name_nl">
+    </div>
+
+    <div class="field">
+      <label for="email2">Email Address</label>
+      <input type="email" id="email2" name="email_nl">
+    </div>
+
+    <button type="submit" id="submit_nl">Subscribe</button>
+  </form>
+
+  <!-- Frame with duplicate labels -->
+  <iframe id="sub-frame" name="sub_frame" srcdoc="<!doctype html><html><body><form id='frame-form'><label for='frame_fn'>First Name</label><input type='text' id='frame_fn' name='frame_fn'></form></body></html>"></iframe>
+</body>
+</html>

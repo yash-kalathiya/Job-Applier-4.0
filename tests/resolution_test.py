@@ -1,7 +1,9 @@
 """Unit tests for deterministic resolution engine, matching, rendering, and cascade."""
 import hashlib
 import os
+from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -337,20 +339,18 @@ class TestAbstain(unittest.TestCase):
     def test_abstain_structure(self):
         q = make_question(question_id='q-42', text='Years of Experience')
         res = abstain(q, 'exact', 'no_exact_match', extra_field='custom_val', score=0.45)
-        self.assertEqual(
-            res,
-            {
-                'question_id': 'q-42',
-                'text': 'Years of Experience',
-                'tier': 'exact',
-                'status': 'needs_user',
-                'fact_key': None,
-                'answer': None,
-                'reason': 'no_exact_match',
-                'extra_field': 'custom_val',
-                'score': 0.45,
-            },
-        )
+        self.assertEqual(res['question_id'], 'q-42')
+        self.assertEqual(res['text'], 'Years of Experience')
+        self.assertEqual(res['tier'], 'exact')
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertIsNone(res['fact_key'])
+        self.assertIsNone(res['answer'])
+        self.assertEqual(res['reason'], 'no_exact_match')
+        self.assertEqual(res['extra_field'], 'custom_val')
+        self.assertEqual(res['score'], 0.45)
+        self.assertEqual(res['input_type'], 'text')
+        self.assertEqual(res['frame_id'], 'frame-0')
+        self.assertEqual(res['control_ids'], ['ctrl-q-42'])
 
 
 class TestRender(unittest.TestCase):
@@ -1015,6 +1015,181 @@ class TestRegressionReviewFixes(unittest.TestCase):
         self.assertEqual(res['reason'], 'conflicting_or_missing_label')
         self.assertEqual(res['tier'], 'semantic')
         self.assertEqual(len(semantic.ranked_queries), 0)
+
+    def test_bachelor_profile_master_only_needs_user(self):
+        from job_applier.resolution.__main__ import _build_bank_from_profile_and_answers
+        profile = {'degree': "Bachelor's Degree"}
+        bank = _build_bank_from_profile_and_answers(profile, [])
+        q = make_question(
+            text='Highest Degree Completed',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-ms', 'label': "Master's Degree", 'value': 'masters'},
+                    {'id': 'opt-phd', 'label': "PhD", 'value': 'phd'},
+                ],
+                'complete': True,
+            },
+        )
+        res = render(q, 'education.degree', bank, 'exact', 'alias')
+        self.assertEqual(res['status'], 'needs_user')
+        self.assertEqual(res['reason'], 'option_not_uniquely_observed')
+
+    def test_normal_multidegree_picks_actual_bachelor_uniquely(self):
+        from job_applier.resolution.__main__ import _build_bank_from_profile_and_answers
+        profile = {'degree': "Bachelor of Science"}
+        bank = _build_bank_from_profile_and_answers(profile, [])
+        q = make_question(
+            text='Highest Degree Completed',
+            input_type='single_choice',
+            options={
+                'items': [
+                    {'id': 'opt-hs', 'label': "High School", 'value': 'hs'},
+                    {'id': 'opt-bs', 'label': "Bachelor of Science", 'value': 'bs'},
+                    {'id': 'opt-ms', 'label': "Master of Science", 'value': 'ms'},
+                    {'id': 'opt-phd', 'label': "PhD", 'value': 'phd'},
+                ],
+                'complete': True,
+            },
+        )
+        res = render(q, 'education.degree', bank, 'exact', 'alias')
+        self.assertEqual(res['status'], 'ready')
+        self.assertEqual(res['answer'], "Bachelor of Science")
+        self.assertEqual(res['selected_option']['value'], "bs")
+
+    def test_degree_cross_qualification_aliases_removed_exact_semantics(self):
+        from job_applier.resolution.__main__ import _build_bank_from_profile_and_answers
+
+        cases_needs_user = [
+            # High School Diploma vs Master
+            ("High School Diploma", "Master's Degree", "opt-ms", "ms"),
+            # MBA vs Bachelor
+            ("MBA", "Bachelor of Science", "opt-bs", "bs"),
+            # PhD Mathematics vs Master
+            ("PhD Mathematics", "Master of Science", "opt-ms", "ms"),
+            # BS vs BA
+            ("BS", "BA", "opt-ba", "ba"),
+            # MS vs MA
+            ("MS", "MA", "opt-ma", "ma"),
+        ]
+
+        for profile_degree, opt_label, opt_id, opt_val in cases_needs_user:
+            with self.subTest(profile_degree=profile_degree, opt_label=opt_label):
+                profile = {'degree': profile_degree}
+                bank = _build_bank_from_profile_and_answers(profile, [])
+                q = make_question(
+                    text='Highest Degree Completed',
+                    input_type='single_choice',
+                    options={
+                        'items': [
+                            {'id': opt_id, 'label': opt_label, 'value': opt_val},
+                        ],
+                        'complete': True,
+                    },
+                )
+                res = render(q, 'education.degree', bank, 'exact', 'alias')
+                self.assertEqual(res['status'], 'needs_user')
+                self.assertEqual(res['reason'], 'option_not_uniquely_observed')
+
+        cases_exact_success = [
+            ("BS", "BS", "opt-bs", "bs"),
+            ("MS", "MS", "opt-ms", "ms"),
+            ("Bachelor of Science", "Bachelor of Science", "opt-bs", "bs"),
+            ("Master of Science", "Master of Science", "opt-ms", "ms"),
+            ("High School Diploma", "High School Diploma", "opt-hs", "hs"),
+        ]
+
+        for profile_degree, opt_label, opt_id, opt_val in cases_exact_success:
+            with self.subTest(exact_degree=profile_degree):
+                profile = {'degree': profile_degree}
+                bank = _build_bank_from_profile_and_answers(profile, [])
+                q = make_question(
+                    text='Highest Degree Completed',
+                    input_type='single_choice',
+                    options={
+                        'items': [
+                            {'id': opt_id, 'label': opt_label, 'value': opt_val},
+                        ],
+                        'complete': True,
+                    },
+                )
+                res = render(q, 'education.degree', bank, 'exact', 'alias')
+                self.assertEqual(res['status'], 'ready')
+                self.assertEqual(res['answer'], profile_degree)
+                self.assertEqual(res['selected_option']['value'], opt_val)
+
+    def test_safe_io_atomic_no_clobber_competing_creation(self):
+        import concurrent.futures
+        from job_applier.safe_io import write_bytes_atomic
+        with tempfile.TemporaryDirectory() as td:
+            target_file = Path(td) / 'test_competing.bin'
+            results = []
+            errors = []
+
+            def worker(data):
+                try:
+                    write_bytes_atomic(target_file, data, overwrite=False)
+                    return True
+                except FileExistsError:
+                    return False
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                futs = [ex.submit(worker, f"data-{i}".encode('utf-8')) for i in range(5)]
+                for f in concurrent.futures.as_completed(futs):
+                    res = f.result()
+                    results.append(res)
+
+            # Exactly one creation succeeded, other four got FileExistsError
+            self.assertEqual(results.count(True), 1)
+            self.assertEqual(results.count(False), 4)
+
+    def test_safe_io_symlink_refusal_destination_and_parent(self):
+        from job_applier.safe_io import write_bytes_atomic
+        with tempfile.TemporaryDirectory() as td:
+            real_file = Path(td) / 'secret_real.txt'
+            real_file.write_text('secret-original', encoding='utf-8')
+            symlink_dest = Path(td) / 'symlink_dest.txt'
+            symlink_dest.symlink_to(real_file)
+
+            # Refuse writing to symlink destination with target unchanged
+            with self.assertRaises(ValueError) as ctx:
+                write_bytes_atomic(symlink_dest, b'malicious payload', overwrite=False)
+            self.assertIn("Refusing to write to symlink", str(ctx.exception))
+            self.assertEqual(real_file.read_text(encoding='utf-8'), 'secret-original')
+
+            with self.assertRaises(ValueError) as ctx2:
+                write_bytes_atomic(symlink_dest, b'malicious payload', overwrite=True)
+            self.assertIn("Refusing to write to symlink", str(ctx2.exception))
+            self.assertEqual(real_file.read_text(encoding='utf-8'), 'secret-original')
+
+            # Refuse writing through symlink parent directory
+            real_dir = Path(td) / 'real_dir'
+            real_dir.mkdir(mode=0o700)
+            symlink_dir = Path(td) / 'symlink_dir'
+            symlink_dir.symlink_to(real_dir)
+            nested_file = symlink_dir / 'child.txt'
+            with self.assertRaises(ValueError) as ctx3:
+                write_bytes_atomic(nested_file, b'data', overwrite=False)
+            self.assertIn("Refusing to access path through symlink", str(ctx3.exception))
+
+    def test_safe_io_overwrite_shorter_output_exact_bytes_and_0600(self):
+        import stat
+        from job_applier.safe_io import write_bytes_atomic
+        with tempfile.TemporaryDirectory() as td:
+            target_file = Path(td) / 'shorter_test.bin'
+            write_bytes_atomic(target_file, b'A' * 200, overwrite=False)
+            self.assertEqual(len(target_file.read_bytes()), 200)
+
+            # Overwrite with shorter content (20 bytes)
+            write_bytes_atomic(target_file, b'B' * 20, overwrite=True)
+            content = target_file.read_bytes()
+            self.assertEqual(content, b'B' * 20)
+            self.assertEqual(len(content), 20)
+            mode = stat.S_IMODE(target_file.stat().st_mode)
+            self.assertEqual(mode, 0o600)
+            # Parent directory mode 0700
+            parent_mode = stat.S_IMODE(target_file.parent.stat().st_mode)
+            self.assertEqual(parent_mode, 0o700)
 
 
 if __name__ == '__main__':

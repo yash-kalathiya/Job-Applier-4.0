@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Greenhouse Application Synthetic Fixture</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 30px auto; padding: 0 16px; color: #333; }
+    h1 { font-size: 24px; margin-bottom: 24px; }
+    .field { margin-bottom: 20px; }
+    label, legend { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+    .required { color: #d00; margin-left: 2px; }
+    input[type=text], input[type=email], input[type=tel], input[type=url], select, textarea {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
+    }
+    fieldset { border: none; padding: 0; margin: 0; }
+    .radio-option { display: inline-flex; align-items: center; margin-right: 18px; font-weight: normal; cursor: pointer; }
+    .radio-option input { margin-right: 6px; }
+
+    /* React-Select styling */
+    .select__container { position: relative; width: 100%; }
+    .select__control {
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid #ccc; border-radius: 4px; padding: 6px 12px; min-height: 40px; box-sizing: border-box; cursor: text;
+    }
+    .select__value-container { display: flex; flex-wrap: wrap; align-items: center; flex: 1; }
+    .select__single-value { font-size: 14px; color: #333; margin-right: 8px; }
+    .select__input {
+      border: none !important; outline: none !important; padding: 0 !important; margin: 0 !important;
+      font-size: 14px; width: 100%; background: transparent;
+    }
+    .select__menu {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+      background: #fff; border: 1px solid #ccc; border-radius: 4px; margin-top: 4px;
+      box-shadow: 0 4px 11px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto;
+    }
+    .select__option {
+      padding: 8px 12px; font-size: 14px; cursor: pointer;
+    }
+    .select__option:hover { background-color: #f0f4f8; }
+
+    .actions { margin-top: 32px; }
+    button[type=submit] {
+      background-color: #2e8540; color: #fff; font-size: 16px; font-weight: 600; padding: 12px 24px;
+      border: none; border-radius: 4px; cursor: pointer;
+    }
+    button[type=submit]:hover { background-color: #256a33; }
+  </style>
+</head>
+<body>
+  <h1>Sample Greenhouse Job Application</h1>
+  <form id="application-form" action="/submit" method="POST" enctype="multipart/form-data">
+    <div class="field">
+      <label for="first_name">First Name <span class="required">*</span></label>
+      <input type="text" id="first_name" name="first_name" autocomplete="given-name" required>
+    </div>
+
+    <div class="field">
+      <label for="last_name">Last Name <span class="required">*</span></label>
+      <input type="text" id="last_name" name="last_name" autocomplete="family-name" required>
+    </div>
+
+    <div class="field">
+      <label for="email">Email <span class="required">*</span></label>
+      <input type="email" id="email" name="email" autocomplete="email" required>
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" name="phone" autocomplete="tel">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_0_text_value">LinkedIn URL</label>
+      <input type="url" id="job_application_answers_attributes_0_text_value" name="job_application[answers_attributes][0][text_value]">
+    </div>
+
+    <div class="field">
+      <label for="resume">Resume/CV <span class="required">*</span></label>
+      <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+    </div>
+
+    <div class="field" id="degree-field">
+      <label id="degree-label" for="degree-select-input">Highest Degree Completed</label>
+      <div class="select__container" id="degree-container">
+        <input type="hidden" name="job_application[answers_attributes][1][value]" id="degree-hidden-input" value="">
+        <div class="select__control">
+          <div class="select__value-container">
+            <div class="select__single-value" style="display:none;"></div>
+            <input id="degree-select-input" role="combobox" aria-controls="degree-menu" aria-autocomplete="list" aria-expanded="false" aria-labelledby="degree-label" class="select__input" autocomplete="off">
+          </div>
+        </div>
+        <div class="select__menu" id="degree-menu" style="display:none;" role="listbox">
+          <div class="select__option" role="option" data-value="high_school">High School</div>
+          <div class="select__option" role="option" data-value="associates">Associate's Degree</div>
+          <div class="select__option" role="option" data-value="bachelors">Bachelor's Degree</div>
+          <div class="select__option" role="option" data-value="masters">Master's Degree</div>
+          <div class="select__option" role="option" data-value="phd">Doctorate / PhD</div>
+        </div>
+      </div>
+    </div>
+
+    <fieldset class="field" id="work-auth-field">
+      <legend>Are you legally authorized to work in the United States? <span class="required">*</span></legend>
+      <label class="radio-option"><input type="radio" name="job_application[answers_attributes][1][boolean_value]" value="true" required> Yes</label>
+      <label class="radio-option"><input type="radio" name="job_application[answers_attributes][1][boolean_value]" value="false"> No</label>
+    </fieldset>
+
+    <div class="field" id="sponsorship-field">
+      <label for="sponsorship_select">Will you now or in the future require sponsorship? <span class="required">*</span></label>
+      <select id="sponsorship_select" name="job_application[answers_attributes][2][boolean_value]" required>
+        <option value="" disabled selected>-- Please select --</option>
+        <option value="false">No</option>
+        <option value="true">Yes</option>
+      </select>
+    </div>
+
+    <div class="field" id="cover-letter-field">
+      <label for="cover_letter">Cover Letter</label>
+      <textarea id="cover_letter" name="cover_letter" rows="4"></textarea>
+    </div>
+
+    <fieldset class="field" id="relocation-field">
+      <legend>Are you willing to relocate? <span class="required">*</span></legend>
+      <input type="radio" id="relocate_yes" name="relocate" value="true">
+      <label for="relocate_yes">Yes</label>
+      <input type="radio" id="relocate_no" name="relocate" value="false">
+      <label for="relocate_no">No</label>
+    </fieldset>
+
+    <div class="field" id="terms-field">
+      <label class="radio-option">
+        <input type="checkbox" id="terms_agree" name="terms_agree" value="1">
+        I acknowledge and agree to the privacy policy
+      </label>
+    </div>
+
+    <div class="field" id="rich-notes-field">
+      <label for="rich_notes">Additional Notes</label>
+      <div id="rich_notes" contenteditable="true" role="textbox" aria-label="Additional Notes" style="border: 1px solid #ccc; min-height: 60px; padding: 8px;"></div>
+    </div>
+
+    <div class="field duplicate-group">
+      <label for="dup_field_1">Duplicate Question Label <span class="required">*</span></label>
+      <input type="text" id="dup_field_1" name="dup_field_1">
+    </div>
+    <div class="field duplicate-group">
+      <label for="dup_field_2">Duplicate Question Label <span class="required">*</span></label>
+      <input type="text" id="dup_field_2" name="dup_field_2">
+    </div>
+
+    <div class="field" id="reverting-field-container">
+      <label for="reverting_field">Reverting Field</label>
+      <input type="text" id="reverting_field" name="reverting_field">
+    </div>
+
+    <fieldset class="field" id="arbitration-field">
+      <legend>Do you agree to the binding arbitration agreement? <span class="required">*</span></legend>
+      <label class="radio-option"><input type="radio" id="arb_yes" name="arbitration" value="true"> Agree</label>
+      <label class="radio-option"><input type="radio" id="arb_no" name="arbitration" value="false"> Decline</label>
+    </fieldset>
+
+    <div class="field" id="password-field">
+      <label for="user_password">Create Account Password</label>
+      <input type="password" id="user_password" name="user_password">
+    </div>
+
+    <div class="actions">
+      <button type="submit" id="submit_app">Submit Application</button>
+    </div>
+  </form>
+
+  <script>
+    // Combobox (React-Select pattern) behavior
+    const degreeInput = document.getElementById('degree-select-input');
+    const degreeMenu = document.getElementById('degree-menu');
+    const singleValue = document.querySelector('.select__single-value');
+
+    function openMenu() {
+      degreeMenu.style.display = 'block';
+      degreeInput.setAttribute('aria-expanded', 'true');
+    }
+    function closeMenu() {
+      degreeMenu.style.display = 'none';
+      degreeInput.setAttribute('aria-expanded', 'false');
+    }
+
+    degreeInput.addEventListener('click', openMenu);
+    degreeInput.addEventListener('focus', openMenu);
+    degreeInput.addEventListener('input', () => {
+      openMenu();
+      const query = (degreeInput.value || '').toLowerCase();
+      const options = degreeMenu.querySelectorAll('.select__option');
+      options.forEach(opt => {
+        if (opt.textContent.toLowerCase().includes(query)) {
+          opt.style.display = 'block';
+        } else {
+          opt.style.display = 'none';
+        }
+      });
+    });
+
+    degreeMenu.querySelectorAll('.select__option').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        singleValue.textContent = opt.textContent.trim();
+        singleValue.style.display = 'block';
+        degreeInput.value = '';
+        const hiddenInput = document.getElementById('degree-hidden-input');
+        if (hiddenInput) {
+          hiddenInput.value = opt.getAttribute('data-value') || '';
+        }
+        closeMenu();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#degree-container')) {
+        closeMenu();
+      }
+    });
+
+    const revInput = document.getElementById('reverting_field');
+    if (revInput) {
+      revInput.addEventListener('input', (e) => {
+        e.target.value = '';
+      });
+    }
+
+    // Form submission default prevent
+    document.getElementById('application-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>

@@ -163,9 +163,37 @@ def collect(page, *, probe_options=True, max_controls=250):
     started = time.monotonic()
     controls, frames, issues, notices, instructions = [], [], [], [], []
     captured = datetime.now(timezone.utc).isoformat()
+    # Pre-scan child frames to identify duplicate identical child frames
+    child_peer_counts = {}
+    for f in page.frames:
+        if f == page.main_frame:
+            continue
+        el_id = None
+        try:
+            el_id = f.frame_element().get_attribute('id')
+        except Exception:
+            pass
+        f_key = (f.url, f.name, el_id)
+        child_peer_counts[f_key] = child_peer_counts.get(f_key, 0) + 1
+
     for frame_index, frame in enumerate(page.frames):
         frame_id = 'frame-' + str(frame_index)
-        record = {'id': frame_id, 'url': frame.url, 'name': frame.name, 'accessibility_snapshot': ''}
+        element_id = None
+        if frame != page.main_frame:
+            try:
+                element_id = frame.frame_element().get_attribute('id')
+            except Exception:
+                pass
+        is_ambiguous_peer = False
+        if frame != page.main_frame:
+            is_ambiguous_peer = (child_peer_counts.get((frame.url, frame.name, element_id), 0) > 1)
+
+        record = {
+            'id': frame_id, 'url': frame.url, 'name': frame.name,
+            'element_id': element_id, 'accessibility_snapshot': ''
+        }
+        if is_ambiguous_peer:
+            record['ambiguous_peer'] = True
         frames.append(record)
         if re.search(r'(recaptcha|hcaptcha)', frame.url, re.I):
             notices.append({'code': 'verification_frame_not_inspected', 'frame': frame_id})
@@ -232,13 +260,18 @@ def collect(page, *, probe_options=True, max_controls=250):
                         probe_options = False
                 question_text = clean_label(dom['group']['label']) if dom['type'] == 'file' and dom['group'] and dom['group']['label'] else dom_name or ax_name or dom['placeholder'] or '(Unlabeled control)'
                 controls.append({'id': ident, 'frame_id': frame_id, 'input_type': kind,
+                    'native_input_type': dom['type'], 'ax_role': ax['role'],
                     'question_text': question_text,
                     'required': dom['required'], 'options': options, 'warnings': warnings,
                     'evidence': {'dom': dom, 'accessibility': ax, 'join_method': 'same_locator_identity_checked'},
                     'locator_candidates': ([{'by': 'role', 'role': ax['role'], 'name': ax_name}] if ax_name else []) +
                         ([{'by': 'id', 'value': dom['id']}] if dom['id'] else []) +
+                        ([{'by': 'name', 'value': dom['name']}] if dom.get('name') else []) +
                         [{'by': 'snapshot_dom_path', 'value': dom['path']}],
-                    'locator_scope': {'frame': frame_id, 'form': dom['form_path'], 'group': dom['group']}})
+                    'locator_scope': {'frame': frame_id, 'frame_url': frame.url, 'frame_name': frame.name,
+                                      'element_id': element_id, 'ambiguous_peer': is_ambiguous_peer,
+                                      'form': dom['form_path'], 'form_id': dom.get('form_id'),
+                                      'has_form': dom.get('has_form', False), 'group': dom['group']}})
             except Exception as exc:
                 issues.append({'code': 'control_unreadable', 'frame': frame_id, 'index': index, 'error': type(exc).__name__})
     questions = group_questions(controls)
@@ -291,7 +324,42 @@ def group_questions(controls):
             warnings.append('group_label_missing')
         questions.append({'id': 'question-' + digest([c['id'] for c in members]),
             'text': text, 'input_type': ('single_choice' if first['input_type'] == 'radio' else 'multiple_choice') if grouped else first['input_type'],
+            'native_input_type': ('radio' if grouped and first['evidence']['dom']['type'] == 'radio' else first['evidence']['dom']['type']),
+            'ax_role': first['evidence']['accessibility']['role'],
             'required': required, 'section': d['section'], 'help': d['help'],
             'control_ids': [c['id'] for c in members], 'options': options,
-            'warnings': warnings, 'frame_id': first['frame_id']})
+            'warnings': warnings, 'frame_id': first['frame_id'],
+            'frame_descriptor': {
+                'id': first['frame_id'],
+                'url': first.get('locator_scope', {}).get('frame_url', ''),
+                'name': first.get('locator_scope', {}).get('frame_name', ''),
+                'element_id': first.get('locator_scope', {}).get('element_id'),
+                'ambiguous_peer': first.get('locator_scope', {}).get('ambiguous_peer', False),
+            },
+            'locator_candidates': first.get('locator_candidates', []),
+            'locator_scope': first.get('locator_scope', {}),
+            'control_metadata': [
+                {
+                    'id': c['id'],
+                    'input_type': c['input_type'],
+                    'native_input_type': c['evidence']['dom']['type'],
+                    'ax_role': c['evidence']['accessibility']['role'],
+                    'label': c['evidence']['dom']['label'],
+                    'dom': {
+                        'id': c['evidence']['dom']['id'],
+                        'name': c['evidence']['dom']['name'],
+                        'tag': c['evidence']['dom']['tag'],
+                        'type': c['evidence']['dom']['type'],
+                        'path': c['evidence']['dom']['path'],
+                        'form_path': c['evidence']['dom']['form_path'],
+                        'form_id': c['evidence']['dom'].get('form_id'),
+                        'has_form': c['evidence']['dom'].get('has_form', False),
+                        'label': c['evidence']['dom']['label'],
+                        'group': c['evidence']['dom']['group']
+                    },
+                    'locator_candidates': c.get('locator_candidates', []),
+                    'locator_scope': c.get('locator_scope', {})
+                }
+                for c in members
+            ]})
     return questions

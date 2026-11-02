@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from .engine import collect, install_observation_guard, wait_for_controls
 from .report import report_html
+from ..safe_io import write_bytes_atomic, write_json_atomic
 
 
 def main(argv=None):
@@ -17,18 +18,25 @@ def main(argv=None):
     parser.add_argument('--headed', action='store_true')
     parser.add_argument('--channel', choices=['chrome', 'chromium'], default='chromium')
     parser.add_argument('--no-probe-options', action='store_true', help='Do not open custom dropdowns')
+    parser.add_argument('--overwrite', action='store_true', default=False, help='Allow overwriting existing evidence files')
     args = parser.parse_args(argv)
     if urlparse(args.url).scheme not in {'https', 'http', 'file'}:
         parser.error('URL must use https://, http:// or file://')
-    out = Path(args.out).expanduser().resolve()
-    if out.exists() and any(out.iterdir()):
-        parser.error('Output directory is not empty; choose a new directory to preserve prior evidence.')
+
+    out_lexical = os.path.abspath(os.path.expanduser(args.out))
+    if not args.overwrite and os.path.isdir(out_lexical):
+        try:
+            if any(os.scandir(out_lexical)):
+                parser.error('Output directory is not empty; choose a new directory to preserve prior evidence or pass --overwrite.')
+        except OSError:
+            pass
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         parser.error('Install optional requirements-phase1.txt in an isolated environment first.')
-    out.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(out, 0o700)
+
+    screenshot_bytes = b''
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not args.headed, chromium_sandbox=True, channel=args.channel)
         try:
@@ -47,18 +55,33 @@ def main(argv=None):
             if response and response.status >= 400:
                 snapshot['issues'].append({'code': 'http_error', 'status': response.status})
                 snapshot['status'] = 'partial'
-            page.screenshot(path=str(out / 'source-page.png'), full_page=True)
+            screenshot_bytes = page.screenshot(full_page=True)
         finally:
             browser.close()
-    for name, text in [('questions.json', json.dumps(snapshot, indent=2, ensure_ascii=False)),
-                       ('index.html', report_html(snapshot)),
-                       ('accessibility.txt', '\n\n'.join(f['id'] + '\n' + f['accessibility_snapshot'] for f in snapshot['frames']))]:
-        destination = out / name
-        destination.write_text(text, encoding='utf-8')
-        destination.chmod(0o600)
-    (out / 'source-page.png').chmod(0o600)
-    print(json.dumps({'report': str(out / 'index.html'), 'json': str(out / 'questions.json'),
-                      'status': snapshot['status'], **snapshot['summary']}, indent=2))
+
+    questions_path = os.path.join(out_lexical, 'questions.json')
+    index_path = os.path.join(out_lexical, 'index.html')
+    access_path = os.path.join(out_lexical, 'accessibility.txt')
+    screenshot_path = os.path.join(out_lexical, 'source-page.png')
+
+    accessibility_text = '\n\n'.join(
+        f['id'] + '\n' + f['accessibility_snapshot'] for f in snapshot['frames']
+    )
+
+    try:
+        write_bytes_atomic(screenshot_path, screenshot_bytes, overwrite=args.overwrite)
+        write_json_atomic(questions_path, snapshot, overwrite=args.overwrite)
+        write_bytes_atomic(index_path, report_html(snapshot).encode('utf-8'), overwrite=args.overwrite)
+        write_bytes_atomic(access_path, accessibility_text.encode('utf-8'), overwrite=args.overwrite)
+    except (FileExistsError, OSError, ValueError, PermissionError) as err:
+        parser.error(f'Failed to write evidence artifact: {err}')
+
+    print(json.dumps({
+        'report': index_path,
+        'json': questions_path,
+        'status': snapshot['status'],
+        **snapshot['summary'],
+    }, indent=2))
     return 0 if snapshot['questions'] else 2
 
 
